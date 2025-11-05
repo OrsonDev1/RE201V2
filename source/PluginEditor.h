@@ -21,5 +21,7 @@ private:
     PluginProcessor& processorRef;
     std::unique_ptr<melatonin::Inspector> inspector;
     juce::TextButton inspectButton { "Inspect the UI" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> delayTimeAttachment;
+    juce::Slider delayTimeSlider;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };

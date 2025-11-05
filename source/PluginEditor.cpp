@@ -18,6 +18,15 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         inspector->setVisible (true);
     };
 
+    addAndMakeVisible(delayTimeSlider);
+    delayTimeSlider.setSliderStyle(juce::Slider::Rotary);
+    delayTimeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+
+    // Attach the slider to the parameter
+    delayTimeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processorRef.parameters, "delayTime", delayTimeSlider
+    );
+
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     setSize (400, 300);
@@ -35,7 +44,7 @@ void PluginEditor::paint (juce::Graphics& g)
     auto area = getLocalBounds();
     g.setColour (juce::Colours::white);
     g.setFont (16.0f);
-    auto helloWorld = juce::String ("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION + " v" VERSION + " running in " + CMAKE_BUILD_TYPE;
+    auto helloWorld = juce::String ("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION + " v0.0.2" + " running in " + CMAKE_BUILD_TYPE;
     g.drawText (helloWorld, area.removeFromTop (150), juce::Justification::centred, false);
 }
 
@@ -43,6 +52,7 @@ void PluginEditor::resized()
 {
     // layout the positions of your child components here
     auto area = getLocalBounds();
-    area.removeFromBottom(50);
-    inspectButton.setBounds (getLocalBounds().withSizeKeepingCentre(100, 50));
+    inspectButton.setBounds(area.removeFromBottom(50).withSizeKeepingCentre(100, 50));
+    delayTimeSlider.setBounds(area.reduced(40)); // leave some margin
+
 }

@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
+set(CURRENT_VERSION "0.0.3")
 
 # This tells cmake we have goodies in the /cmake folder
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

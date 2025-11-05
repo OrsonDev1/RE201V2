@@ -1,10 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-
-#if (MSVC)
-#include "ipps.h"
-#endif
+#include <vector>
 
 class PluginProcessor : public juce::AudioProcessor
 {
@@ -40,11 +37,12 @@ public:
 
     std::vector<float> delayBuffer;
     int writeIndex = 0;
-    int delaySamples = 0;
 
     float feedbackLevel = 0.4f;
-    float delayTimeMs = 500.0f;
 
+    // APVTS for parameters
+    std::atomic<float>* delayTimeParam = nullptr; // pointer to the delay time parameter
+    juce::AudioProcessorValueTreeState parameters;
 
 
 private:
