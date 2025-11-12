@@ -33,6 +33,13 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     feedbackAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processorRef.parameters, "feedback", feedbackSlider
     );
+    addAndMakeVisible(head1Button);
+    addAndMakeVisible(head2Button);
+    addAndMakeVisible(head3Button);
+
+    head1Button.onClick = [this] { processorRef.headEnabled[0] = head1Button.getToggleState(); };
+    head2Button.onClick = [this] { processorRef.headEnabled[1] = head2Button.getToggleState(); };
+    head3Button.onClick = [this] { processorRef.headEnabled[2] = head3Button.getToggleState(); };
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     setSize (400, 300);
@@ -62,5 +69,8 @@ void PluginEditor::resized()
     delayTimeSlider.setBounds(area.reduced(40)); // leave some margin
     delayTimeSlider.setBounds(100, 100, 100, 100);
     feedbackSlider.setBounds(250, 100, 100, 100);
+    head1Button.setBounds(10, 100, 80, 30);
+    head2Button.setBounds(100, 100, 80, 30);
+    head3Button.setBounds(190, 100, 80, 30);
 
 }

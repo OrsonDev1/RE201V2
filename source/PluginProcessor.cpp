@@ -69,27 +69,38 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 {
     int numSamples = buffer.getNumSamples();
     int numChannels = buffer.getNumChannels();
+    int bufferSize = (int)delayBuffer.size();
 
-    float delayTimeMs = parameters.getRawParameterValue("delayTime")->load();
-    int delaySamples = static_cast<int>((delayTimeMs / 1000.0f) * getSampleRate());
-
+    float feedback = *feedbackParam;
 
     for (int channel = 0; channel < numChannels; ++channel)
     {
-        auto* channelData = buffer.getWritePointer (channel);
+        auto* channelData = buffer.getWritePointer(channel);
 
         for (int i = 0; i < numSamples; ++i)
         {
-            int readIndex = (writeIndex - delaySamples + (int) delayBuffer.size()) % delayBuffer.size();
-            float delayedSample = delayBuffer[readIndex];
-
             float inputSample = channelData[i];
-            float outputSample = inputSample + delayedSample;
+            float delayedMix = 0.0f;
 
-            delayBuffer[writeIndex] = inputSample + (delayedSample * (*feedbackParam));
+            // Read from each head
+            for (size_t h = 0; h < headTimesMs.size(); ++h)
+            {
+                if (!headEnabled[h])
+                    continue; // skip this head if it's off
+
+                int headDelaySamples = static_cast<int>((headTimesMs[h] / 1000.0f) * getSampleRate());
+                int readIndex = (writeIndex - headDelaySamples + bufferSize) % bufferSize;
+                delayedMix += delayBuffer[readIndex] * headLevels[h];
+            }
+
+            // Mix dry + wet
+            float outputSample = inputSample + delayedMix;
+
+            // Write input + feedback
+            delayBuffer[writeIndex] = inputSample + (delayedMix * feedback);
             channelData[i] = outputSample;
 
-            writeIndex = (writeIndex + 1) % delayBuffer.size();
+            writeIndex = (writeIndex + 1) % bufferSize;
         }
     }
 }

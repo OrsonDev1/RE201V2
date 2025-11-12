@@ -45,6 +45,14 @@ public:
     std::atomic<float>* feedbackParam = nullptr; // pointer to feedback time parameter
     juce::AudioProcessorValueTreeState parameters;
 
+    // Delay head times in ms
+    std::vector<float> headTimesMs = { 150.0f, 300.0f, 450.0f };
+
+    // Output level per head
+    std::vector<float> headLevels  = { 0.6f, 0.4f, 0.3f };
+
+    // On/off state for each head
+    std::vector<bool> headEnabled  = { true, true, true };
 
 
 private:

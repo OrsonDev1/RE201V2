@@ -25,5 +25,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> delayTimeAttachment;
     juce::Slider feedbackSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> feedbackAttachment;
+
+    juce::ToggleButton head1Button { "Head 1" };
+    juce::ToggleButton head2Button { "Head 2" };
+    juce::ToggleButton head3Button { "Head 3" };
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };
