@@ -67,13 +67,19 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    int numSamples = buffer.getNumSamples();
-    int numChannels = buffer.getNumChannels();
-    int bufferSize = static_cast<int>(delayBuffer.size());
+    if (delayBuffer.empty())
+        return;
 
-    // Read parameter values
+    const int numSamples = buffer.getNumSamples();
+    const int numChannels = buffer.getNumChannels();
+    const int bufferSize = static_cast<int> (delayBuffer.size());
+
     float feedback = *feedbackParam;
-    float delayTimeMs = *delayTimeParam;
+    float delayTimeMs = *delayTimeParam;  // base delay time knob in milliseconds
+    double sampleRate = getSampleRate();
+
+    // Define the head multipliers: head 1 = 1.0×, head 2 ~1.94×, head 3 ~2.85×
+    const float headMultipliers[] = { 1.0f, 1.94f, 2.85f };
 
     for (int channel = 0; channel < numChannels; ++channel)
     {
@@ -84,21 +90,24 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             float inputSample = channelData[i];
             float delayedMix = 0.0f;
 
-            // Read from each head
             for (size_t h = 0; h < headTimesMs.size(); ++h)
             {
-                if (!headEnabled[h])
+                if (! headEnabled[h])
                     continue;
 
-                // Calculate delay in samples using the slider value
-                int headDelaySamples = static_cast<int>(((headTimesMs[h] + delayTimeMs) / 1000.0f) * getSampleRate());
+                // compute the effective delay time for this head
+                float effectiveTimeMs = delayTimeMs * headMultipliers[h];
+
+                // convert to samples
+                int headDelaySamples = static_cast<int>( (effectiveTimeMs / 1000.0f) * sampleRate );
+                if (headDelaySamples >= bufferSize)
+                    headDelaySamples = bufferSize - 1;  // clamp
+
                 int readIndex = (writeIndex - headDelaySamples + bufferSize) % bufferSize;
                 delayedMix += delayBuffer[readIndex] * headLevels[h];
             }
 
             float outputSample = inputSample + delayedMix;
-
-            // Write input + feedback into delay buffer
             delayBuffer[writeIndex] = inputSample + (delayedMix * feedback);
             channelData[i] = outputSample;
 

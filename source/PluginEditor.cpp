@@ -57,20 +57,37 @@ void PluginEditor::paint (juce::Graphics& g)
     auto area = getLocalBounds();
     g.setColour (juce::Colours::white);
     g.setFont (16.0f);
-    auto helloWorld = juce::String ("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION + " v0.0.2" + " running in " + CMAKE_BUILD_TYPE;
+    auto helloWorld = juce::String ("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION + " v0.0.3" + " running in " + CMAKE_BUILD_TYPE;
     g.drawText (helloWorld, area.removeFromTop (150), juce::Justification::top, false);
 }
 
 void PluginEditor::resized()
 {
-    // layout the positions of your child components here
-    auto area = getLocalBounds();
-    inspectButton.setBounds(area.removeFromBottom(50).withSizeKeepingCentre(100, 50));
-    delayTimeSlider.setBounds(area.reduced(40)); // leave some margin
-    delayTimeSlider.setBounds(100, 100, 100, 100);
-    feedbackSlider.setBounds(250, 100, 100, 100);
-    head1Button.setBounds(10, 100, 80, 30);
-    head2Button.setBounds(100, 100, 80, 30);
-    head3Button.setBounds(190, 100, 80, 30);
+    juce::FlexBox flex;
+    flex.flexDirection = juce::FlexBox::Direction::column;
+    flex.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
 
+    // Top row: sliders
+    juce::FlexBox sliders;
+    sliders.flexDirection = juce::FlexBox::Direction::row;
+    sliders.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+    sliders.items.add(juce::FlexItem(delayTimeSlider).withFlex(1.0f));
+    sliders.items.add(juce::FlexItem(feedbackSlider).withFlex(1.0f));
+
+    flex.items.add(juce::FlexItem(sliders).withHeight(150));
+
+    // Bottom row: head buttons
+    juce::FlexBox heads;
+    heads.flexDirection = juce::FlexBox::Direction::row;
+    heads.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+    heads.items.add(juce::FlexItem(head1Button).withFlex(1.0f));
+    heads.items.add(juce::FlexItem(head2Button).withFlex(1.0f));
+    heads.items.add(juce::FlexItem(head3Button).withFlex(1.0f));
+
+    flex.items.add(juce::FlexItem(heads).withHeight(50));
+
+    // Bottom row: inspect button
+    flex.items.add(juce::FlexItem(inspectButton).withHeight(40));
+
+    flex.performLayout(getLocalBounds().reduced(10));
 }
