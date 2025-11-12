@@ -1,8 +1,12 @@
 #pragma once
 
+
+
 #include "PluginProcessor.h"
 #include "BinaryData.h"
 #include "melatonin_inspector/melatonin_inspector.h"
+#include <vector>
+
 
 //==============================================================================
 class PluginEditor : public juce::AudioProcessorEditor
@@ -14,6 +18,7 @@ public:
     //==============================================================================
     void paint (juce::Graphics&) override;
     void resized() override;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> attachments;
 
 private:
     // This reference is provided as a quick way for your editor to
@@ -35,6 +40,11 @@ private:
     //wet dry
     juce::Slider wetDrySlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wetDryAttachment;
+    juce::Slider masterGainSlider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterGainAttachment;
+
+
+
 
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wowAttachment;
@@ -49,6 +59,7 @@ private:
     juce::Label wowLabel;
     juce::Label flutterLabel;
     juce::Label wetDryLabel;
+    juce::Label masterGainLabel;
 
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)

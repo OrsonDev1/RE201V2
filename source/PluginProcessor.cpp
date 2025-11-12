@@ -17,39 +17,42 @@ PluginProcessor::PluginProcessor()
         std::make_unique<juce::AudioParameterFloat>("saturation", "Saturation", 0.0f, 1.0f, 0.5f),
         std::make_unique<juce::AudioParameterFloat>("wow", "Wow", 0.0f, 1.0f, 0.1f),
         std::make_unique<juce::AudioParameterFloat>("flutter", "Flutter", 0.0f, 1.0f, 0.1f),
-        std::make_unique<juce::AudioParameterFloat>("wetDry", "Wet/Dry Mix", 0.0f, 1.0f, 1.0f)
+        std::make_unique<juce::AudioParameterFloat>("wetDry", "Wet/Dry Mix", 0.0f, 1.0f, 1.0f),
+        std::make_unique<juce::AudioParameterFloat>("masterGain", "Master Gain", -60.0f, 12.0f, 0.0f)
     })
-
 {
-    // ← Initialize the pointer here
-    delayTimeParam = parameters.getRawParameterValue("delayTime");
-    feedbackParam = parameters.getRawParameterValue("feedback");
-    saturationParam = parameters.getRawParameterValue("saturation");
-    wowParam = parameters.getRawParameterValue("wow");
-    flutterParam = parameters.getRawParameterValue("flutter");
-    wetDryParam = parameters.getRawParameterValue("wetDry");
+    delayTimeParam   = parameters.getRawParameterValue("delayTime");
+    feedbackParam    = parameters.getRawParameterValue("feedback");
+    saturationParam  = parameters.getRawParameterValue("saturation");
+    wowParam         = parameters.getRawParameterValue("wow");
+    flutterParam     = parameters.getRawParameterValue("flutter");
+    wetDryParam      = parameters.getRawParameterValue("wetDry");
+    masterGainParam  = parameters.getRawParameterValue("masterGain"); // atomic<float>*
 }
 
 PluginProcessor::~PluginProcessor()
 {
-
 }
 
 //==============================================================================
-void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void PluginProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
 {
     const float maxDelayTimeMs = 2000.0f * 2.85f; // head3 max
-    const int maxDelaySamples = static_cast<int>(sampleRate * maxDelayTimeMs / 1000.0);
+    const size_t maxDelaySamples = static_cast<size_t>(sampleRate * maxDelayTimeMs / 1000.0);
     delayBuffer.resize(maxDelaySamples, 0.0f);
     writeIndex = 0;
+
     smoothedDelayTime.reset(sampleRate, 0.02); // 20ms smoothing
     smoothedDelayTime.setCurrentAndTargetValue(*delayTimeParam);
+
+    wowPhase = 0.0f;
+    flutterPhase = 0.0f;
+    wowRate = 0.1f;       // can tweak
+    flutterRate = 1.0f;   // can tweak
 }
 
 void PluginProcessor::releaseResources()
 {
-    // When playback stops, you can use this as an opportunity to free up any
-    // spare memory, etc.
 }
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -58,37 +61,40 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
     juce::ignoreUnused (layouts);
     return true;
 #else
-    // This is the place where you check if the layout is supported.
-    // In this template code we only support mono or stereo.
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
         && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
 
-    // This checks if the input layout matches the output layout
-    #if !JucePlugin_IsSynth
+#if !JucePlugin_IsSynth
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
-    #endif
+#endif
 
     return true;
 #endif
 }
 
+//==============================================================================
 void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 
-    float delayTimeMs  = *delayTimeParam;
-    float feedback     = *feedbackParam;
-    float saturation   = *saturationParam;
-    float wowAmount    = *wowParam;
-    float flutterAmount= *flutterParam;
-    float wet          = *wetDryParam;
-    float dry          = 1.0f - wet;
+    float delayTimeMs   = *delayTimeParam;
+    float feedback      = *feedbackParam;
+    float saturation    = *saturationParam;
+    float wowAmount     = *wowParam;
+    float flutterAmount = *flutterParam;
+    float wet           = *wetDryParam;
+    float dry           = 1.0f - wet;
+
+    float masterGainDb   = *masterGainParam;
+    float masterGainLin  = juce::Decibels::decibelsToGain(masterGainDb);
 
     const float sampleRate = getSampleRate();
-    const int delaySamples = static_cast<int>(sampleRate * delayTimeMs / 1000.0f);
+    const size_t delaySamples = static_cast<size_t>(sampleRate * delayTimeMs / 1000.0);
+
+    const size_t bufSize = delayBuffer.size();
 
     for (int channel = 0; channel < numChannels; ++channel)
     {
@@ -99,20 +105,20 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             float inputSample = channelData[i];
 
             // --- Wow & flutter modulation ---
-            float wowMod     = std::sin(wowPhase) * wowAmount * 50.0f;      // max 50 samples
+            float wowMod     = std::sin(wowPhase) * wowAmount * 50.0f;       // max 50 samples
             float flutterMod = std::sin(flutterPhase) * flutterAmount * 5.0f; // max 5 samples
 
             // small random flutter jitter
             flutterMod += ((rand() / float(RAND_MAX)) - 0.5f) * flutterAmount * 5.0f * 0.3f;
 
             // modulated read index
-            float readIndex = writeIndex - delaySamples + wowMod + flutterMod;
-            if (readIndex < 0.0f)
-                readIndex += delayBuffer.size();
+            float readIndex = static_cast<float>(writeIndex) - static_cast<float>(delaySamples) + wowMod + flutterMod;
+            while (readIndex < 0.0f)
+                readIndex += static_cast<float>(bufSize);
 
-            int indexA = static_cast<int>(readIndex) % delayBuffer.size();
-            int indexB = (indexA + 1) % delayBuffer.size();
-            float frac = readIndex - static_cast<float>(indexA);
+            size_t indexA = static_cast<size_t>(static_cast<int>(readIndex)) % bufSize;
+            size_t indexB = (indexA + 1) % bufSize;
+            float frac = readIndex - static_cast<float>(static_cast<int>(readIndex));
 
             // linear interpolation
             float delayedSample = delayBuffer[indexA] * (1.0f - frac) + delayBuffer[indexB] * frac;
@@ -127,11 +133,14 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             // --- Wet/Dry mix ---
             float outputSample = inputSample * dry + processedSample * wet;
 
+            // --- Apply master gain ---
+            outputSample *= masterGainLin;
+
             // --- Prevent clipping ---
             channelData[i] = juce::jlimit(-1.0f, 1.0f, outputSample);
 
             // --- Advance write index ---
-            writeIndex = (writeIndex + 1) % delayBuffer.size();
+            writeIndex = (writeIndex + 1) % bufSize;
 
             // --- Advance LFO phases ---
             wowPhase += 2.0f * juce::MathConstants<float>::pi * wowRate / sampleRate;
@@ -145,22 +154,15 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     }
 }
 
+//==============================================================================
 juce::AudioProcessorEditor* PluginProcessor::createEditor()
 {
     return new PluginEditor (*this);
 }
 
-//==============================================================================
-bool PluginProcessor::hasEditor() const
-{
-    return true; // (change this to false if you choose to not supply an editor)
-}
+bool PluginProcessor::hasEditor() const { return true; }
 
-//==============================================================================
-const juce::String PluginProcessor::getName() const
-{
-    return JucePlugin_Name;
-}
+const juce::String PluginProcessor::getName() const { return JucePlugin_Name; }
 
 bool PluginProcessor::acceptsMidi() const
 {
@@ -189,56 +191,17 @@ bool PluginProcessor::isMidiEffect() const
 #endif
 }
 
-double PluginProcessor::getTailLengthSeconds() const
-{
-    return 0.0;
-}
+double PluginProcessor::getTailLengthSeconds() const { return 0.0; }
+int PluginProcessor::getNumPrograms() { return 1; }
+int PluginProcessor::getCurrentProgram() { return 0; }
+void PluginProcessor::setCurrentProgram (int) {}
+const juce::String PluginProcessor::getProgramName (int) { return {}; }
+void PluginProcessor::changeProgramName (int, const juce::String&) {}
 
-int PluginProcessor::getNumPrograms()
-{
-    return 1; // NB: some hosts don't cope very well if you tell them there are 0 programs,
-        // so this should be at least 1, even if you're not really implementing programs.
-}
-
-int PluginProcessor::getCurrentProgram()
-{
-    return 0;
-}
-
-void PluginProcessor::setCurrentProgram (int index)
-{
-    juce::ignoreUnused (index);
-}
-
-const juce::String PluginProcessor::getProgramName (int index)
-{
-    juce::ignoreUnused (index);
-    return {};
-}
-
-void PluginProcessor::changeProgramName (int index, const juce::String& newName)
-{
-    juce::ignoreUnused (index, newName);
-}
+void PluginProcessor::getStateInformation (juce::MemoryBlock& destData) { juce::ignoreUnused(destData); }
+void PluginProcessor::setStateInformation (const void* data, int sizeInBytes) { juce::ignoreUnused(data, sizeInBytes); }
 
 //==============================================================================
-void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
-{
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
-    juce::ignoreUnused (destData);
-}
-
-void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
-{
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
-    juce::ignoreUnused (data, sizeInBytes);
-}
-
-//==============================================================================
-// This creates new instances of the plugin..
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new PluginProcessor();
