@@ -12,11 +12,13 @@ PluginProcessor::PluginProcessor()
 #endif
     ),
     parameters(*this, nullptr, "PARAMETERS", {
-        std::make_unique<juce::AudioParameterFloat>("delayTime", "Delay Time", 50.0f, 2000.0f, 500.0f)
+        std::make_unique<juce::AudioParameterFloat>("delayTime", "Delay Time", 50.0f, 2000.0f, 500.0f),
+        std::make_unique<juce::AudioParameterFloat>("feedback", "Feedback", 0.0f, 0.95f, 0.4f)
     })
 {
     // ← Initialize the pointer here
     delayTimeParam = parameters.getRawParameterValue("delayTime");
+    feedbackParam = parameters.getRawParameterValue("feedback");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -84,7 +86,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             float inputSample = channelData[i];
             float outputSample = inputSample + delayedSample;
 
-            delayBuffer[writeIndex] = inputSample + (delayedSample * feedbackLevel);
+            delayBuffer[writeIndex] = inputSample + (delayedSample * (*feedbackParam));
             channelData[i] = outputSample;
 
             writeIndex = (writeIndex + 1) % delayBuffer.size();

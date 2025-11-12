@@ -23,5 +23,7 @@ private:
     juce::TextButton inspectButton { "Inspect the UI" };
     juce::Slider delayTimeSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> delayTimeAttachment;
+    juce::Slider feedbackSlider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> feedbackAttachment;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };

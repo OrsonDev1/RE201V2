@@ -42,7 +42,9 @@ public:
 
     // APVTS for parameters
     std::atomic<float>* delayTimeParam = nullptr; // pointer to the delay time parameter
+    std::atomic<float>* feedbackParam = nullptr; // pointer to feedback time parameter
     juce::AudioProcessorValueTreeState parameters;
+
 
 
 private:
