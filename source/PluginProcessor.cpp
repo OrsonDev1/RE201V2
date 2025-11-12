@@ -16,8 +16,10 @@ PluginProcessor::PluginProcessor()
         std::make_unique<juce::AudioParameterFloat>("feedback", "Feedback", 0.0f, 0.95f, 0.4f),
         std::make_unique<juce::AudioParameterFloat>("saturation", "Saturation", 0.0f, 1.0f, 0.5f),
         std::make_unique<juce::AudioParameterFloat>("wow", "Wow", 0.0f, 1.0f, 0.1f),
-        std::make_unique<juce::AudioParameterFloat>("flutter", "Flutter", 0.0f, 1.0f, 0.1f)
+        std::make_unique<juce::AudioParameterFloat>("flutter", "Flutter", 0.0f, 1.0f, 0.1f),
+        std::make_unique<juce::AudioParameterFloat>("wetDry", "Wet/Dry Mix", 0.0f, 1.0f, 1.0f)
     })
+
 {
     // ← Initialize the pointer here
     delayTimeParam = parameters.getRawParameterValue("delayTime");
@@ -25,6 +27,7 @@ PluginProcessor::PluginProcessor()
     saturationParam = parameters.getRawParameterValue("saturation");
     wowParam = parameters.getRawParameterValue("wow");
     flutterParam = parameters.getRawParameterValue("flutter");
+    wetDryParam = parameters.getRawParameterValue("wetDry");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -71,18 +74,21 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 #endif
 }
 
-void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    const int numSamples = buffer.getNumSamples();
+    const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
-    float delayTimeMs = *delayTimeParam;
-    float feedback = *feedbackParam;
-    float saturation = *saturationParam;
-    float wowAmount = *wowParam;
-    float flutterAmount = *flutterParam;
 
-    // convert delayTimeMs to samples
-    int delaySamples = static_cast<int>(getSampleRate() * delayTimeMs / 1000.0f);
+    float delayTimeMs  = *delayTimeParam;
+    float feedback     = *feedbackParam;
+    float saturation   = *saturationParam;
+    float wowAmount    = *wowParam;
+    float flutterAmount= *flutterParam;
+    float wet          = *wetDryParam;
+    float dry          = 1.0f - wet;
+
+    const float sampleRate = getSampleRate();
+    const int delaySamples = static_cast<int>(sampleRate * delayTimeMs / 1000.0f);
 
     for (int channel = 0; channel < numChannels; ++channel)
     {
@@ -92,43 +98,49 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         {
             float inputSample = channelData[i];
 
-            // --- Calculate wow & flutter modulation ---
-            float wowMod = std::sin(wowPhase) * wowAmount * 50.0f;       // max 50 samples
+            // --- Wow & flutter modulation ---
+            float wowMod     = std::sin(wowPhase) * wowAmount * 50.0f;      // max 50 samples
             float flutterMod = std::sin(flutterPhase) * flutterAmount * 5.0f; // max 5 samples
 
-            // optional: small random flutter jitter
+            // small random flutter jitter
             flutterMod += ((rand() / float(RAND_MAX)) - 0.5f) * flutterAmount * 5.0f * 0.3f;
 
-            // final read index with modulation
-            float readIndexMod = writeIndex - delaySamples + wowMod + flutterMod;
-            if (readIndexMod < 0.0f)
-                readIndexMod += delayBuffer.size();
+            // modulated read index
+            float readIndex = writeIndex - delaySamples + wowMod + flutterMod;
+            if (readIndex < 0.0f)
+                readIndex += delayBuffer.size();
 
-            int indexA = static_cast<int>(readIndexMod) % delayBuffer.size();
+            int indexA = static_cast<int>(readIndex) % delayBuffer.size();
             int indexB = (indexA + 1) % delayBuffer.size();
-            float frac = readIndexMod - static_cast<float>(indexA);
+            float frac = readIndex - static_cast<float>(indexA);
 
+            // linear interpolation
             float delayedSample = delayBuffer[indexA] * (1.0f - frac) + delayBuffer[indexB] * frac;
 
-            // --- Apply feedback and store in buffer ---
-            float outputSample = inputSample + delayedSample * feedback;
-            delayBuffer[writeIndex] = outputSample;
+            // --- Feedback ---
+            float processedSample = inputSample + delayedSample * feedback;
+            delayBuffer[writeIndex] = processedSample;
 
-            // --- Apply tape saturation ---
-            outputSample = std::tanh(outputSample * (1.0f + 5.0f * saturation));
+            // --- Saturation ---
+            processedSample = std::tanh(processedSample * (1.0f + 5.0f * saturation));
 
-            // write final sample
-            channelData[i] = outputSample;
+            // --- Wet/Dry mix ---
+            float outputSample = inputSample * dry + processedSample * wet;
 
-            // advance write index
+            // --- Prevent clipping ---
+            channelData[i] = juce::jlimit(-1.0f, 1.0f, outputSample);
+
+            // --- Advance write index ---
             writeIndex = (writeIndex + 1) % delayBuffer.size();
 
-            // advance LFO phases per sample
-            wowPhase += 2.0f * juce::MathConstants<float>::pi * wowRate / getSampleRate();
-            if (wowPhase >= 2.0f * juce::MathConstants<float>::pi) wowPhase -= 2.0f * juce::MathConstants<float>::pi;
+            // --- Advance LFO phases ---
+            wowPhase += 2.0f * juce::MathConstants<float>::pi * wowRate / sampleRate;
+            if (wowPhase >= 2.0f * juce::MathConstants<float>::pi)
+                wowPhase -= 2.0f * juce::MathConstants<float>::pi;
 
-            flutterPhase += 2.0f * juce::MathConstants<float>::pi * flutterRate / getSampleRate();
-            if (flutterPhase >= 2.0f * juce::MathConstants<float>::pi) flutterPhase -= 2.0f * juce::MathConstants<float>::pi;
+            flutterPhase += 2.0f * juce::MathConstants<float>::pi * flutterRate / sampleRate;
+            if (flutterPhase >= 2.0f * juce::MathConstants<float>::pi)
+                flutterPhase -= 2.0f * juce::MathConstants<float>::pi;
         }
     }
 }

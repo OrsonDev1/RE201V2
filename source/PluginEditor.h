@@ -32,6 +32,10 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> saturationAttachment;
     juce::Slider wowSlider;
     juce::Slider flutterSlider;
+    //wet dry
+    juce::Slider wetDrySlider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wetDryAttachment;
+
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wowAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flutterAttachment;
@@ -44,6 +48,7 @@ private:
     juce::Label saturationLabel;
     juce::Label wowLabel;
     juce::Label flutterLabel;
+    juce::Label wetDryLabel;
 
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)

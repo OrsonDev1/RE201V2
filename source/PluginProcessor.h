@@ -63,6 +63,7 @@ public:
     //wow and flutter
     std::atomic<float>* wowParam = nullptr;
     std::atomic<float>* flutterParam = nullptr;
+    std::atomic<float>* wetDryParam = nullptr;
 
     float wowPhase = 0.0f;
     float flutterPhase = 0.0f;
