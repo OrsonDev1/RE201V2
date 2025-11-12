@@ -29,12 +29,12 @@ PluginProcessor::~PluginProcessor()
 //==============================================================================
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    const int maxDelayMs = 2000;
-    const int maxDelaySamples = static_cast<int> (sampleRate * maxDelayMs / 1000.0);
-    delayBuffer.resize (maxDelaySamples);
-    std::fill (delayBuffer.begin(), delayBuffer.end(), 0.0f);
+    const float maxDelayTimeMs = 2000.0f * 2.85f; // head3 max
+    const int maxDelaySamples = static_cast<int>(sampleRate * maxDelayTimeMs / 1000.0);
+    delayBuffer.resize(maxDelaySamples, 0.0f);
     writeIndex = 0;
-    delayTimeParam = parameters.getRawParameterValue("delayTime");
+    smoothedDelayTime.reset(sampleRate, 0.02); // 20ms smoothing
+    smoothedDelayTime.setCurrentAndTargetValue(*delayTimeParam);
 }
 
 void PluginProcessor::releaseResources()
@@ -67,50 +67,58 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    if (delayBuffer.empty())
-        return;
-
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
-    const int bufferSize = static_cast<int> (delayBuffer.size());
+    const int bufferSize = static_cast<int>(delayBuffer.size());
 
-    float feedback = *feedbackParam;
-    float delayTimeMs = *delayTimeParam;  // base delay time knob in milliseconds
-    double sampleRate = getSampleRate();
+    // Smooth the base delay time (ms)
+    smoothedDelayTime.setTargetValue(*delayTimeParam);
 
-    // Define the head multipliers: head 1 = 1.0×, head 2 ~1.94×, head 3 ~2.85×
-    const float headMultipliers[] = { 1.0f, 1.94f, 2.85f };
+    // Read feedback once per block
+    const float feedback = *feedbackParam;
 
     for (int channel = 0; channel < numChannels; ++channel)
     {
-        auto* channelData = buffer.getWritePointer(channel);
+        float* channelData = buffer.getWritePointer(channel);
 
         for (int i = 0; i < numSamples; ++i)
         {
             float inputSample = channelData[i];
             float delayedMix = 0.0f;
 
+            // Get smoothed base delay for this sample
+            float baseDelayMs = smoothedDelayTime.getNextValue();
+
+            // Update head delays dynamically
+            headTimesMs[0] = baseDelayMs;          // Head 1
+            headTimesMs[1] = baseDelayMs * 1.94f;  // Head 2
+            headTimesMs[2] = baseDelayMs * 2.85f;  // Head 3
+
+            // Sum contributions from each head
             for (size_t h = 0; h < headTimesMs.size(); ++h)
             {
-                if (! headEnabled[h])
+                if (!headEnabled[h])
                     continue;
 
-                // compute the effective delay time for this head
-                float effectiveTimeMs = delayTimeMs * headMultipliers[h];
+                int headDelaySamples = static_cast<int>((headTimesMs[h] / 1000.0f) * getSampleRate());
 
-                // convert to samples
-                int headDelaySamples = static_cast<int>( (effectiveTimeMs / 1000.0f) * sampleRate );
-                if (headDelaySamples >= bufferSize)
-                    headDelaySamples = bufferSize - 1;  // clamp
+                // Safe circular buffer read
+                int readIndex = writeIndex - headDelaySamples;
+                if (readIndex < 0)
+                    readIndex += bufferSize;
 
-                int readIndex = (writeIndex - headDelaySamples + bufferSize) % bufferSize;
                 delayedMix += delayBuffer[readIndex] * headLevels[h];
             }
 
+            // Mix dry + wet
             float outputSample = inputSample + delayedMix;
-            delayBuffer[writeIndex] = inputSample + (delayedMix * feedback);
+
+            // Write into delay buffer with feedback
+            delayBuffer[writeIndex] = inputSample + delayedMix * feedback;
+
             channelData[i] = outputSample;
 
+            // Increment writeIndex safely
             writeIndex = (writeIndex + 1) % bufferSize;
         }
     }

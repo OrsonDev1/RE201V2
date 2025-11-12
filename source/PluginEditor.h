@@ -29,5 +29,7 @@ private:
     juce::ToggleButton head1Button { "Head 1" };
     juce::ToggleButton head2Button { "Head 2" };
     juce::ToggleButton head3Button { "Head 3" };
+    juce::Label delayLabel;
+    juce::Label feedbackLabel;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };

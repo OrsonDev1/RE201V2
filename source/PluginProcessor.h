@@ -44,6 +44,7 @@ public:
     std::atomic<float>* delayTimeParam = nullptr; // pointer to the delay time parameter
     std::atomic<float>* feedbackParam = nullptr; // pointer to feedback time parameter
     juce::AudioProcessorValueTreeState parameters;
+    juce::SmoothedValue<float> smoothedDelayTime;
 
     // Delay head times in ms
     std::vector<float> headTimesMs = { 150.0f, 300.0f, 450.0f };

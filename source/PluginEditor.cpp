@@ -40,9 +40,17 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     head1Button.onClick = [this] { processorRef.headEnabled[0] = head1Button.getToggleState(); };
     head2Button.onClick = [this] { processorRef.headEnabled[1] = head2Button.getToggleState(); };
     head3Button.onClick = [this] { processorRef.headEnabled[2] = head3Button.getToggleState(); };
+
+    delayLabel.setText("Delay Time", juce::dontSendNotification);
+    delayLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(delayLabel);
+
+    feedbackLabel.setText("Feedback", juce::dontSendNotification);
+    feedbackLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(feedbackLabel);
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize (400, 300);
+    setSize (400, 500);
 }
 
 PluginEditor::~PluginEditor()
@@ -63,31 +71,41 @@ void PluginEditor::paint (juce::Graphics& g)
 
 void PluginEditor::resized()
 {
-    juce::FlexBox flex;
-    flex.flexDirection = juce::FlexBox::Direction::column;
-    flex.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+    auto area = getLocalBounds().reduced(20); // overall padding
 
-    // Top row: sliders
-    juce::FlexBox sliders;
-    sliders.flexDirection = juce::FlexBox::Direction::row;
-    sliders.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
-    sliders.items.add(juce::FlexItem(delayTimeSlider).withFlex(1.0f));
-    sliders.items.add(juce::FlexItem(feedbackSlider).withFlex(1.0f));
+    // Top area for title
+    auto titleArea = area.removeFromTop(30);
 
-    flex.items.add(juce::FlexItem(sliders).withHeight(150));
+    // Bottom area for inspect button
+    inspectButton.setBounds(area.removeFromBottom(40).withSizeKeepingCentre(120, 30));
 
-    // Bottom row: head buttons
-    juce::FlexBox heads;
-    heads.flexDirection = juce::FlexBox::Direction::row;
-    heads.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
-    heads.items.add(juce::FlexItem(head1Button).withFlex(1.0f));
-    heads.items.add(juce::FlexItem(head2Button).withFlex(1.0f));
-    heads.items.add(juce::FlexItem(head3Button).withFlex(1.0f));
+    // Divide remaining area: left for head buttons, right for knobs
+    auto leftArea = area.removeFromLeft(area.getWidth() / 3);
+    auto rightArea = area;
 
-    flex.items.add(juce::FlexItem(heads).withHeight(50));
+    // Head buttons layout (vertical)
+    int buttonHeight = 30;
+    int buttonSpacing = 10;
+    head1Button.setBounds(leftArea.removeFromTop(buttonHeight).withSizeKeepingCentre(80, buttonHeight));
+    leftArea.removeFromTop(buttonSpacing);
+    head2Button.setBounds(leftArea.removeFromTop(buttonHeight).withSizeKeepingCentre(80, buttonHeight));
+    leftArea.removeFromTop(buttonSpacing);
+    head3Button.setBounds(leftArea.removeFromTop(buttonHeight).withSizeKeepingCentre(80, buttonHeight));
 
-    // Bottom row: inspect button
-    flex.items.add(juce::FlexItem(inspectButton).withHeight(40));
+    // Knobs layout (vertical on right)
+    int knobSize = 100;
+    int labelHeight = 20;
+    int knobSpacing = 40;
 
-    flex.performLayout(getLocalBounds().reduced(10));
+    // Horizontal center for labels and knobs
+    int knobCenterX = rightArea.getX() + rightArea.getWidth() / 2;
+
+    // Delay knob + label
+    delayLabel.setBounds(knobCenterX - knobSize/2, rightArea.getY(), knobSize, labelHeight);
+    delayTimeSlider.setBounds(knobCenterX - knobSize/2, rightArea.getY() + labelHeight, knobSize, knobSize);
+    rightArea.removeFromTop(labelHeight + knobSize + knobSpacing);
+
+    // Feedback knob + label
+    feedbackLabel.setBounds(knobCenterX - knobSize/2, rightArea.getY(), knobSize, labelHeight);
+    feedbackSlider.setBounds(knobCenterX - knobSize/2, rightArea.getY() + labelHeight, knobSize, knobSize);
 }
