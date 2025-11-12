@@ -69,9 +69,11 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 {
     int numSamples = buffer.getNumSamples();
     int numChannels = buffer.getNumChannels();
-    int bufferSize = (int)delayBuffer.size();
+    int bufferSize = static_cast<int>(delayBuffer.size());
 
+    // Read parameter values
     float feedback = *feedbackParam;
+    float delayTimeMs = *delayTimeParam;
 
     for (int channel = 0; channel < numChannels; ++channel)
     {
@@ -86,17 +88,17 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             for (size_t h = 0; h < headTimesMs.size(); ++h)
             {
                 if (!headEnabled[h])
-                    continue; // skip this head if it's off
+                    continue;
 
-                int headDelaySamples = static_cast<int>((headTimesMs[h] / 1000.0f) * getSampleRate());
+                // Calculate delay in samples using the slider value
+                int headDelaySamples = static_cast<int>(((headTimesMs[h] + delayTimeMs) / 1000.0f) * getSampleRate());
                 int readIndex = (writeIndex - headDelaySamples + bufferSize) % bufferSize;
                 delayedMix += delayBuffer[readIndex] * headLevels[h];
             }
 
-            // Mix dry + wet
             float outputSample = inputSample + delayedMix;
 
-            // Write input + feedback
+            // Write input + feedback into delay buffer
             delayBuffer[writeIndex] = inputSample + (delayedMix * feedback);
             channelData[i] = outputSample;
 
