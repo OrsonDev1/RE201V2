@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 //==============================================================================
 PluginProcessor::PluginProcessor()
@@ -37,6 +38,7 @@ PluginProcessor::~PluginProcessor()
 //==============================================================================
 void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    // --- Delay buffer setup ---
     const float maxDelayTimeMs = 2000.0f * 2.85f; // head3 max
     const size_t maxDelaySamples = static_cast<size_t>(sampleRate * maxDelayTimeMs / 1000.0);
     delayBuffer.resize(maxDelaySamples, 0.0f);
@@ -47,7 +49,7 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     if (delayTimeParam)
         smoothedDelayTime.setCurrentAndTargetValue(delayTimeParam->load());
 
-    // DSP spec used for reverb and other DSP modules
+    // --- DSP spec for Convolver and other modules ---
     juce::dsp::ProcessSpec spec {
         sampleRate,
         static_cast<juce::uint32>(samplesPerBlock),
@@ -56,23 +58,26 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     reverbConvolver.prepare(spec);
 
-    // Initialize modulation
+    // --- Modulation LFO init ---
     wowPhase = 0.0f;
     flutterPhase = 0.0f;
     wowRate = 0.1f;
     flutterRate = 1.0f;
 
-    // Load default impulse response
-    auto defaultIR = juce::File::getSpecialLocation(juce::File::currentApplicationFile)
-                        .getSiblingFile("Resources/DefaultReverbIR.wav");
+    // --- Load embedded impulse response ---
+    if (BinaryData::DefaultReverbIR_wavSize > 0)
+    {
+        reverbConvolver.loadImpulseResponse(
+            BinaryData::DefaultReverbIR_wav,                        // pointer to memory
+            static_cast<size_t>(BinaryData::DefaultReverbIR_wavSize), // size in bytes
+            juce::dsp::Convolution::Stereo::yes,                   // stereo
+            juce::dsp::Convolution::Trim::no,                      // trim
+            static_cast<size_t>(BinaryData::DefaultReverbIR_wavSize), // size again
+            juce::dsp::Convolution::Normalise::yes                 // normalise
+        );
+    }
 
-    if (defaultIR.existsAsFile())
-        reverbConvolver.loadImpulseResponse(defaultIR,
-                                            juce::dsp::Convolution::Stereo::yes,
-                                            juce::dsp::Convolution::Trim::no,
-                                            0);
-
-    // Prevent unused warnings (if ever needed)
+    // Prevent unused warnings
     juce::ignoreUnused(sampleRate, samplesPerBlock);
 }
 
@@ -112,7 +117,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     float wowAmount     = 0.0f;
     float flutterAmount = 0.0f;
     float wet           = 1.0f;
-    float reverbMix     = 0.0f;
+    float reverbMix     = 1.0f;
     float masterGainDb  = 0.0f;
     float dryLevel      = 1.0f - wet;
 
