@@ -35,6 +35,7 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // Delay/feedback stuff
     std::vector<float> delayBuffer;
     int writeIndex = 0;
 
@@ -54,6 +55,11 @@ public:
 
     // On/off state for each head
     std::vector<bool> headEnabled  = { true, true, true };
+
+
+    //Saturation paras
+    std::atomic<float>* saturationParam = nullptr;
+
 
 
 private:

@@ -5,34 +5,54 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 {
     juce::ignoreUnused (processorRef);
 
-    addAndMakeVisible (inspectButton);
-
-    // this chunk of code instantiates and opens the melatonin inspector
+    // --- Inspect button ---
+    addAndMakeVisible(inspectButton);
     inspectButton.onClick = [&] {
         if (!inspector)
         {
-            inspector = std::make_unique<melatonin::Inspector> (*this);
+            inspector = std::make_unique<melatonin::Inspector>(*this);
             inspector->onClose = [this]() { inspector.reset(); };
         }
-
-        inspector->setVisible (true);
+        inspector->setVisible(true);
     };
 
+    // --- Delay knob ---
     addAndMakeVisible(delayTimeSlider);
     delayTimeSlider.setSliderStyle(juce::Slider::Rotary);
     delayTimeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-
-    // Attach the slider to the parameter
     delayTimeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processorRef.parameters, "delayTime", delayTimeSlider
     );
+
+    delayLabel.setText("Delay Time", juce::dontSendNotification);
+    delayLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(delayLabel);
+
+    // --- Feedback knob ---
     addAndMakeVisible(feedbackSlider);
     feedbackSlider.setSliderStyle(juce::Slider::Rotary);
     feedbackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
-
     feedbackAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processorRef.parameters, "feedback", feedbackSlider
     );
+
+    feedbackLabel.setText("Feedback", juce::dontSendNotification);
+    feedbackLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(feedbackLabel);
+
+    // --- Saturation knob ---
+    addAndMakeVisible(saturationSlider);
+    saturationSlider.setSliderStyle(juce::Slider::Rotary);
+    saturationSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    saturationAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processorRef.parameters, "saturation", saturationSlider
+    );
+
+    saturationLabel.setText("Tape Saturation", juce::dontSendNotification);
+    saturationLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(saturationLabel);
+
+    // --- Head buttons ---
     addAndMakeVisible(head1Button);
     addAndMakeVisible(head2Button);
     addAndMakeVisible(head3Button);
@@ -41,71 +61,64 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     head2Button.onClick = [this] { processorRef.headEnabled[1] = head2Button.getToggleState(); };
     head3Button.onClick = [this] { processorRef.headEnabled[2] = head3Button.getToggleState(); };
 
-    delayLabel.setText("Delay Time", juce::dontSendNotification);
-    delayLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(delayLabel);
-
-    feedbackLabel.setText("Feedback", juce::dontSendNotification);
-    feedbackLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(feedbackLabel);
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
-    setSize (400, 500);
+    // --- Set editor size ---
+    setSize(400, 500);
 }
 
-PluginEditor::~PluginEditor()
-{
-}
+PluginEditor::~PluginEditor() {}
 
-void PluginEditor::paint (juce::Graphics& g)
+void PluginEditor::paint(juce::Graphics& g)
 {
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
 
     auto area = getLocalBounds();
-    g.setColour (juce::Colours::white);
-    g.setFont (16.0f);
-    auto helloWorld = juce::String ("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION + " v0.0.3" + " running in " + CMAKE_BUILD_TYPE;
-    g.drawText (helloWorld, area.removeFromTop (150), juce::Justification::top, false);
+    g.setColour(juce::Colours::white);
+    g.setFont(16.0f);
+    auto helloWorld = juce::String("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION +
+                      " v0.0.3 running in " + CMAKE_BUILD_TYPE;
+    g.drawText(helloWorld, area.removeFromTop(150), juce::Justification::top, false);
 }
 
 void PluginEditor::resized()
 {
     auto area = getLocalBounds().reduced(20); // overall padding
 
-    // Top area for title
+    // --- Top title area ---
     auto titleArea = area.removeFromTop(30);
 
-    // Bottom area for inspect button
-    inspectButton.setBounds(area.removeFromBottom(40).withSizeKeepingCentre(120, 30));
+    // --- Bottom inspect button ---
+    auto bottomArea = area.removeFromBottom(40);
+    inspectButton.setBounds(bottomArea.removeFromLeft(120).withHeight(30));
 
-    // Divide remaining area: left for head buttons, right for knobs
+    // --- Left: Head buttons ---
     auto leftArea = area.removeFromLeft(area.getWidth() / 3);
-    auto rightArea = area;
-
-    // Head buttons layout (vertical)
     int buttonHeight = 30;
     int buttonSpacing = 10;
+
     head1Button.setBounds(leftArea.removeFromTop(buttonHeight).withSizeKeepingCentre(80, buttonHeight));
     leftArea.removeFromTop(buttonSpacing);
     head2Button.setBounds(leftArea.removeFromTop(buttonHeight).withSizeKeepingCentre(80, buttonHeight));
     leftArea.removeFromTop(buttonSpacing);
     head3Button.setBounds(leftArea.removeFromTop(buttonHeight).withSizeKeepingCentre(80, buttonHeight));
 
-    // Knobs layout (vertical on right)
+    // --- Right: Knobs layout ---
+    auto rightArea = area;
     int knobSize = 100;
     int labelHeight = 20;
-    int knobSpacing = 40;
-
-    // Horizontal center for labels and knobs
+    int knobSpacing = 30; // vertical spacing between knobs
     int knobCenterX = rightArea.getX() + rightArea.getWidth() / 2;
 
-    // Delay knob + label
+    // Delay
     delayLabel.setBounds(knobCenterX - knobSize/2, rightArea.getY(), knobSize, labelHeight);
     delayTimeSlider.setBounds(knobCenterX - knobSize/2, rightArea.getY() + labelHeight, knobSize, knobSize);
     rightArea.removeFromTop(labelHeight + knobSize + knobSpacing);
 
-    // Feedback knob + label
+    // Feedback
     feedbackLabel.setBounds(knobCenterX - knobSize/2, rightArea.getY(), knobSize, labelHeight);
     feedbackSlider.setBounds(knobCenterX - knobSize/2, rightArea.getY() + labelHeight, knobSize, knobSize);
+    rightArea.removeFromTop(labelHeight + knobSize + knobSpacing);
+
+    // Saturation
+    saturationLabel.setBounds(knobCenterX - knobSize/2, rightArea.getY(), knobSize, labelHeight);
+    saturationSlider.setBounds(knobCenterX - knobSize/2, rightArea.getY() + labelHeight, knobSize, knobSize);
 }
