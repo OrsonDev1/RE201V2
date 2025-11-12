@@ -30,6 +30,11 @@ private:
     //saturation
     juce::Slider saturationSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> saturationAttachment;
+    juce::Slider wowSlider;
+    juce::Slider flutterSlider;
+
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wowAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flutterAttachment;
 
     juce::ToggleButton head1Button { "Head 1" };
     juce::ToggleButton head2Button { "Head 2" };
@@ -37,5 +42,9 @@ private:
     juce::Label delayLabel;
     juce::Label feedbackLabel;
     juce::Label saturationLabel;
+    juce::Label wowLabel;
+    juce::Label flutterLabel;
+
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };

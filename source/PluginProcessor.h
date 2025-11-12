@@ -60,6 +60,16 @@ public:
     //Saturation paras
     std::atomic<float>* saturationParam = nullptr;
 
+    //wow and flutter
+    std::atomic<float>* wowParam = nullptr;
+    std::atomic<float>* flutterParam = nullptr;
+
+    float wowPhase = 0.0f;
+    float flutterPhase = 0.0f;
+    float wowRate = 0.2f;    // Hz, slow wobble
+    float flutterRate = 50.0f; // Hz, faster jitter
+
+
 
 
 private:
