@@ -35,20 +35,45 @@ PluginProcessor::~PluginProcessor()
 }
 
 //==============================================================================
-void PluginProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
+void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     const float maxDelayTimeMs = 2000.0f * 2.85f; // head3 max
     const size_t maxDelaySamples = static_cast<size_t>(sampleRate * maxDelayTimeMs / 1000.0);
     delayBuffer.resize(maxDelaySamples, 0.0f);
     writeIndex = 0;
 
+    // Smooth delay time changes
     smoothedDelayTime.reset(sampleRate, 0.02); // 20ms smoothing
-    smoothedDelayTime.setCurrentAndTargetValue(*delayTimeParam);
+    if (delayTimeParam)
+        smoothedDelayTime.setCurrentAndTargetValue(delayTimeParam->load());
 
+    // DSP spec used for reverb and other DSP modules
+    juce::dsp::ProcessSpec spec {
+        sampleRate,
+        static_cast<juce::uint32>(samplesPerBlock),
+        static_cast<juce::uint32>(getTotalNumOutputChannels())
+    };
+
+    reverbConvolver.prepare(spec);
+
+    // Initialize modulation
     wowPhase = 0.0f;
     flutterPhase = 0.0f;
-    wowRate = 0.1f;       // can tweak
-    flutterRate = 1.0f;   // can tweak
+    wowRate = 0.1f;
+    flutterRate = 1.0f;
+
+    // Load default impulse response
+    auto defaultIR = juce::File::getSpecialLocation(juce::File::currentApplicationFile)
+                        .getSiblingFile("Resources/DefaultReverbIR.wav");
+
+    if (defaultIR.existsAsFile())
+        reverbConvolver.loadImpulseResponse(defaultIR,
+                                            juce::dsp::Convolution::Stereo::yes,
+                                            juce::dsp::Convolution::Trim::no,
+                                            0);
+
+    // Prevent unused warnings (if ever needed)
+    juce::ignoreUnused(sampleRate, samplesPerBlock);
 }
 
 void PluginProcessor::releaseResources()
@@ -80,76 +105,138 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 
-    float delayTimeMs   = *delayTimeParam;
-    float feedback      = *feedbackParam;
-    float saturation    = *saturationParam;
-    float wowAmount     = *wowParam;
-    float flutterAmount = *flutterParam;
-    float wet           = *wetDryParam;
-    float dry           = 1.0f - wet;
+    // --- Parameter reads ---
+    float delayTimeMs   = 500.0f;
+    float feedback      = 0.4f;
+    float saturation    = 0.5f;
+    float wowAmount     = 0.0f;
+    float flutterAmount = 0.0f;
+    float wet           = 1.0f;
+    float reverbMix     = 0.0f;
+    float masterGainDb  = 0.0f;
+    float dryLevel      = 1.0f - wet;
 
-    float masterGainDb   = *masterGainParam;
-    float masterGainLin  = juce::Decibels::decibelsToGain(masterGainDb);
+    if (delayTimeParam)   delayTimeMs   = delayTimeParam->load();
+    if (feedbackParam)    feedback      = feedbackParam->load();
+    if (saturationParam)  saturation    = saturationParam->load();
+    if (wowParam)         wowAmount     = wowParam->load();
+    if (flutterParam)     flutterAmount = flutterParam->load();
+    if (wetDryParam)      wet           = wetDryParam->load();
+    if (reverbMixParam)   reverbMix     = reverbMixParam->load();
+    if (masterGainParam)  masterGainDb  = masterGainParam->load();
+    const float masterGainLin = juce::Decibels::decibelsToGain(masterGainDb);
 
-    const float sampleRate = getSampleRate();
-    const size_t delaySamples = static_cast<size_t>(sampleRate * delayTimeMs / 1000.0);
+    const float sampleRate = static_cast<float>(getSampleRate());
+    const size_t delaySamples = static_cast<size_t>(sampleRate * delayTimeMs / 1000.0f);
+    const size_t bufSize = delayBuffer.size() > 0 ? delayBuffer.size() : 1; // guard
 
-    const size_t bufSize = delayBuffer.size();
-
-    for (int channel = 0; channel < numChannels; ++channel)
+    // === Delay + saturation + wet/dry (fills `buffer`) ===
+    for (int ch = 0; ch < numChannels; ++ch)
     {
-        float* channelData = buffer.getWritePointer(channel);
+        float* channelData = buffer.getWritePointer(ch);
 
         for (int i = 0; i < numSamples; ++i)
         {
-            float inputSample = channelData[i];
+            const float inputSample = channelData[i];
 
-            // --- Wow & flutter modulation ---
-            float wowMod     = std::sin(wowPhase) * wowAmount * 50.0f;       // max 50 samples
-            float flutterMod = std::sin(flutterPhase) * flutterAmount * 5.0f; // max 5 samples
+            // --- Wow & flutter modulation (shared phases) ---
+            const float wowMod     = std::sin(wowPhase) * wowAmount * 50.0f;        // max ~50 samples
+            float flutterMod       = std::sin(flutterPhase) * flutterAmount * 5.0f;  // max ~5 samples
+            flutterMod += ((std::rand() / float(RAND_MAX)) - 0.5f) * flutterAmount * 5.0f * 0.3f;
 
-            // small random flutter jitter
-            flutterMod += ((rand() / float(RAND_MAX)) - 0.5f) * flutterAmount * 5.0f * 0.3f;
-
-            // modulated read index
+            // modulated read index (wrap safely)
             float readIndex = static_cast<float>(writeIndex) - static_cast<float>(delaySamples) + wowMod + flutterMod;
             while (readIndex < 0.0f)
                 readIndex += static_cast<float>(bufSize);
 
-            size_t indexA = static_cast<size_t>(static_cast<int>(readIndex)) % bufSize;
-            size_t indexB = (indexA + 1) % bufSize;
-            float frac = readIndex - static_cast<float>(static_cast<int>(readIndex));
+            const int readInt = static_cast<int>(readIndex);
+            const size_t indexA = static_cast<size_t>(readInt) % bufSize;
+            const size_t indexB = (indexA + 1) % bufSize;
+            const float frac = readIndex - static_cast<float>(readInt);
 
-            // linear interpolation
-            float delayedSample = delayBuffer[indexA] * (1.0f - frac) + delayBuffer[indexB] * frac;
+            // linear interpolation from delayBuffer
+            const float delayedSample = delayBuffer[indexA] * (1.0f - frac) + delayBuffer[indexB] * frac;
 
-            // --- Feedback ---
+            // feedback + write into delay buffer
             float processedSample = inputSample + delayedSample * feedback;
-            delayBuffer[writeIndex] = processedSample;
+            delayBuffer[static_cast<size_t>(writeIndex)] = processedSample;
 
-            // --- Saturation ---
+            // saturation
             processedSample = std::tanh(processedSample * (1.0f + 5.0f * saturation));
 
-            // --- Wet/Dry mix ---
-            float outputSample = inputSample * dry + processedSample * wet;
+            // wet/dry mix (this is the plugin's effect wetness)
+            const float dryOut = inputSample * dryLevel;
+            const float wetOut = processedSample * wet;
+            channelData[i] = dryOut + wetOut;
 
-            // --- Apply master gain ---
-            outputSample *= masterGainLin;
+            // advance write index (shared for all channels)
+            writeIndex = (writeIndex + 1) % static_cast<int>(bufSize);
 
-            // --- Prevent clipping ---
-            channelData[i] = juce::jlimit(-1.0f, 1.0f, outputSample);
+            // advance LFO phases only once per sample (they are global)
+            if (ch == numChannels - 1) // only update phases after last channel's sample to avoid doubling
+            {
+                wowPhase += 2.0f * juce::MathConstants<float>::pi * wowRate / sampleRate;
+                if (wowPhase >= 2.0f * juce::MathConstants<float>::pi)
+                    wowPhase -= 2.0f * juce::MathConstants<float>::pi;
 
-            // --- Advance write index ---
-            writeIndex = (writeIndex + 1) % bufSize;
+                flutterPhase += 2.0f * juce::MathConstants<float>::pi * flutterRate / sampleRate;
+                if (flutterPhase >= 2.0f * juce::MathConstants<float>::pi)
+                    flutterPhase -= 2.0f * juce::MathConstants<float>::pi;
+            }
+        }
+    }
 
-            // --- Advance LFO phases ---
-            wowPhase += 2.0f * juce::MathConstants<float>::pi * wowRate / sampleRate;
-            if (wowPhase >= 2.0f * juce::MathConstants<float>::pi)
-                wowPhase -= 2.0f * juce::MathConstants<float>::pi;
+    // === Convolution reverb (process whole buffer once) ===
+    if (reverbEnabled) // assume you have a bool flag reverbEnabled in the processor
+    {
+        // Prepare a temp buffer to receive reverb output
+        juce::AudioBuffer<float> wetBuffer;
+        wetBuffer.setSize(numChannels, numSamples);
+        wetBuffer.clear();
 
-            flutterPhase += 2.0f * juce::MathConstants<float>::pi * flutterRate / sampleRate;
-            if (flutterPhase >= 2.0f * juce::MathConstants<float>::pi)
-                flutterPhase -= 2.0f * juce::MathConstants<float>::pi;
+        // Create dsp::AudioBlock wrappers
+        juce::dsp::AudioBlock<float> inputBlock (buffer);
+        juce::dsp::AudioBlock<float> outputBlock (wetBuffer);
+
+        // Process: input -> output (non-replacing)
+        juce::dsp::ProcessContextNonReplacing<float> ctx (inputBlock, outputBlock);
+        reverbConvolver.process (ctx);
+
+        // Mix reverb output back into the main buffer using reverbMix
+        if (reverbMix > 0.0f)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                float* mainPtr = buffer.getWritePointer(ch);
+                float* revPtr  = wetBuffer.getWritePointer(ch);
+
+                for (int i = 0; i < numSamples; ++i)
+                    mainPtr[i] = mainPtr[i] * (1.0f - reverbMix) + revPtr[i] * reverbMix;
+            }
+        }
+    }
+
+    // === Master gain (apply after reverb) ===
+    if (masterGainLin != 1.0f)
+    {
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* data = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                float s = data[i] * masterGainLin;
+                data[i] = juce::jlimit(-1.0f, 1.0f, s);
+            }
+        }
+    }
+    else
+    {
+        // still clip to [-1,1] to be safe
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* data = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+                data[i] = juce::jlimit(-1.0f, 1.0f, data[i]);
         }
     }
 }

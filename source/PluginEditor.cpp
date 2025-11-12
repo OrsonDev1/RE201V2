@@ -62,7 +62,7 @@ void PluginEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white);
     g.setFont(16.0f);
     auto titleText = juce::String("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION +
-                     " v0.0.7 running in " + CMAKE_BUILD_TYPE;
+                     " v0.0.8 running in " + CMAKE_BUILD_TYPE;
     g.drawText(titleText, getLocalBounds().removeFromTop(150), juce::Justification::top, false);
 }
 
