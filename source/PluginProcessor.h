@@ -39,7 +39,7 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // === Delay system ===
-    std::vector<float> delayBuffer;
+    juce::AudioBuffer<float> delayBuffer;
     int writeIndex = 0;
     float feedbackLevel = 0.4f;
 

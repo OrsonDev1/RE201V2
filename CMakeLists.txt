@@ -26,7 +26,7 @@ juce_add_plugin(RE201
         PLUGIN_MANUFACTURER_CODE ORSO
         PLUGIN_CODE O876
         FORMATS Standalone AU VST3 AUv3
-        PRODUCT_NAME "RE201 Demo"
+        PRODUCT_NAME "RE201"
 )
 
 # --- Binary Data ---
@@ -52,6 +52,7 @@ target_link_libraries(SharedCode
         juce_dsp
         juce_gui_basics
         juce_gui_extra
+        RE201BinaryData
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags

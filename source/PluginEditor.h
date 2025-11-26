@@ -42,6 +42,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wetDryAttachment;
     juce::Slider masterGainSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterGainAttachment;
+    juce::Slider reverbMixSlider;
 
 
 
@@ -60,6 +61,7 @@ private:
     juce::Label flutterLabel;
     juce::Label wetDryLabel;
     juce::Label masterGainLabel;
+    juce::Label reverbMixLabel;
 
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)

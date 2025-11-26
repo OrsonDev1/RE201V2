@@ -19,6 +19,12 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     addAndMakeVisible(head1Button);
     addAndMakeVisible(head2Button);
     addAndMakeVisible(head3Button);
+
+    // FIX: Set initial toggle state to match the processor defaults (true)
+    head1Button.setToggleState(processorRef.headEnabled[0], juce::dontSendNotification);
+    head2Button.setToggleState(processorRef.headEnabled[1], juce::dontSendNotification);
+    head3Button.setToggleState(processorRef.headEnabled[2], juce::dontSendNotification);
+
     head1Button.onClick = [this] { processorRef.headEnabled[0] = head1Button.getToggleState(); };
     head2Button.onClick = [this] { processorRef.headEnabled[1] = head2Button.getToggleState(); };
     head3Button.onClick = [this] { processorRef.headEnabled[2] = head3Button.getToggleState(); };
@@ -39,6 +45,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     };
 
     setupSlider(wetDrySlider, wetDryLabel, "Wet/Dry", "wetDry");
+    setupSlider(reverbMixSlider, reverbMixLabel, "Reverb", "reverbMix");
     setupSlider(masterGainSlider, masterGainLabel, "Master Gain", "masterGain");
 
     // --- Effect knobs ---
@@ -62,7 +69,7 @@ void PluginEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white);
     g.setFont(16.0f);
     auto titleText = juce::String("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION +
-                     " v0.0.9 running in " + CMAKE_BUILD_TYPE;
+                     " v0.1.0 running in " + CMAKE_BUILD_TYPE;
     g.drawText(titleText, getLocalBounds().removeFromTop(150), juce::Justification::top, false);
 }
 
@@ -71,15 +78,18 @@ void PluginEditor::resized()
     auto area = getLocalBounds().reduced(20);
     area.removeFromTop(20);
 
+    // --- Left Side: Heads & Master Section ---
     int headWidth = 80;
     int headHeight = 40;
     int headSpacing = 20;
     int headStartY = area.getY() + 20;
 
+    // 1. Head Buttons (Top Left)
     head1Button.setBounds(area.getX() + 20, headStartY, headWidth, headHeight);
     head2Button.setBounds(area.getX() + 20, headStartY + headHeight + headSpacing, headWidth, headHeight);
     head3Button.setBounds(area.getX() + 20, headStartY + 2 * (headHeight + headSpacing), headWidth, headHeight);
 
+    // 2. Master Section (Bottom Left)
     int knobSize = 100;
     int labelHeight = 20;
     int knobY = headStartY + 3 * (headHeight + headSpacing) + 30;
@@ -90,25 +100,38 @@ void PluginEditor::resized()
     masterGainSlider.setBounds(area.getX() + 40 + knobSize, knobY + labelHeight, knobSize, knobSize);
     masterGainLabel.setBounds(masterGainSlider.getX(), knobY, knobSize, labelHeight);
 
+    // --- Right Side: Effects Grid ---
     int rightX = area.getX() + 300;
     int verticalSpacing = 40;
-    int y = area.getY();
+    int colSpacing = 120; // Distance between columns
 
-    delayLabel.setBounds(rightX, y, knobSize, labelHeight);
-    delayTimeSlider.setBounds(rightX, y + labelHeight, knobSize, knobSize);
-    y += labelHeight + knobSize + verticalSpacing;
+    // Calculate Row Y positions
+    int row1Y = area.getY();
+    int row2Y = row1Y + labelHeight + knobSize + verticalSpacing;
+    int row3Y = row2Y + labelHeight + knobSize + verticalSpacing;
 
-    feedbackLabel.setBounds(rightX, y, knobSize, labelHeight);
-    feedbackSlider.setBounds(rightX, y + labelHeight, knobSize, knobSize);
-    y += labelHeight + knobSize + verticalSpacing;
+    // Column 1 (Delay, Feedback, Saturation)
+    delayLabel.setBounds(rightX, row1Y, knobSize, labelHeight);
+    delayTimeSlider.setBounds(rightX, row1Y + labelHeight, knobSize, knobSize);
 
-    saturationLabel.setBounds(rightX, y, knobSize, labelHeight);
-    saturationSlider.setBounds(rightX, y + labelHeight, knobSize, knobSize);
-    y += labelHeight + knobSize + verticalSpacing;
+    feedbackLabel.setBounds(rightX, row2Y, knobSize, labelHeight);
+    feedbackSlider.setBounds(rightX, row2Y + labelHeight, knobSize, knobSize);
 
-    wowLabel.setBounds(rightX + 120, area.getY(), knobSize, labelHeight);
-    wowSlider.setBounds(rightX + 120, area.getY() + labelHeight, knobSize, knobSize);
+    saturationLabel.setBounds(rightX, row3Y, knobSize, labelHeight);
+    saturationSlider.setBounds(rightX, row3Y + labelHeight, knobSize, knobSize);
 
-    flutterLabel.setBounds(rightX + 120, area.getY() + knobSize + labelHeight + verticalSpacing, knobSize, labelHeight);
-    flutterSlider.setBounds(rightX + 120, area.getY() + knobSize + labelHeight * 2 + verticalSpacing, knobSize, knobSize);
+    // Column 2 (Wow, Flutter)
+    int col2X = rightX + colSpacing;
+
+    wowLabel.setBounds(col2X, row1Y, knobSize, labelHeight);
+    wowSlider.setBounds(col2X, row1Y + labelHeight, knobSize, knobSize);
+
+    flutterLabel.setBounds(col2X, row2Y, knobSize, labelHeight);
+    flutterSlider.setBounds(col2X, row2Y + labelHeight, knobSize, knobSize);
+
+    // Column 3 (Reverb Mix) - To the right of Flutter
+    int col3X = rightX + (colSpacing * 2);
+
+    reverbMixLabel.setBounds(col3X, row2Y, knobSize, labelHeight);
+    reverbMixSlider.setBounds(col3X, row2Y + labelHeight, knobSize, knobSize);
 }
