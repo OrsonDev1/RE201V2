@@ -247,7 +247,22 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             data[i] = juce::jlimit(-1.0f, 1.0f, data[i]);
     }
 }
+void PluginProcessor::loadImpulseResponse(const juce::File& irFile, bool stereo)
+{
+    // Check if file actually exists before trying to load
+    if (!irFile.existsAsFile()) return;
 
+    // Load the file into the convolution engine
+    // We use Trim::yes to remove silence at the start/end
+    // We use Normalise::yes to ensure it doesn't blow up the volume
+    reverbConvolver.loadImpulseResponse(
+        irFile,
+        stereo ? juce::dsp::Convolution::Stereo::yes : juce::dsp::Convolution::Stereo::no,
+        juce::dsp::Convolution::Trim::yes,
+        0,
+        juce::dsp::Convolution::Normalise::yes
+    );
+}
 //==============================================================================
 juce::AudioProcessorEditor* PluginProcessor::createEditor()
 {

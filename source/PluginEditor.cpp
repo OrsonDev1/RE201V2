@@ -56,6 +56,33 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     setupSlider(flutterSlider, flutterLabel, "Flutter", "flutter");
 
     setSize(700, 600);
+
+    // --- IR Load Button ---
+    addAndMakeVisible(loadIRButton);
+    loadIRButton.onClick = [this]
+    {
+        // 1. Create the File Chooser
+        fileChooser = std::make_unique<juce::FileChooser>(
+            "Select Impulse Response",
+            juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+            "*.wav;*.aiff;*.mp3" // Allowed formats
+        );
+
+        // 2. Define flags (Open file, ignore directories)
+        auto folderChooserFlags = juce::FileBrowserComponent::openMode |
+                                  juce::FileBrowserComponent::canSelectFiles;
+
+        // 3. Launch asynchronously (required for modern plugins)
+        fileChooser->launchAsync(folderChooserFlags, [this](const juce::FileChooser& fc)
+        {
+            auto file = fc.getResult();
+            if (file.existsAsFile())
+            {
+                // 4. Pass the file to the processor
+                processorRef.loadImpulseResponse(file);
+            }
+        });
+    };
 }
 
 PluginEditor::~PluginEditor() {
@@ -69,7 +96,7 @@ void PluginEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white);
     g.setFont(16.0f);
     auto titleText = juce::String("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION +
-                     " v0.0.10 running in " + CMAKE_BUILD_TYPE;
+                     " v0.0.11 running in " + CMAKE_BUILD_TYPE;
     g.drawText(titleText, getLocalBounds().removeFromTop(150), juce::Justification::top, false);
 }
 
@@ -134,4 +161,6 @@ void PluginEditor::resized()
 
     reverbMixLabel.setBounds(col3X, row2Y, knobSize, labelHeight);
     reverbMixSlider.setBounds(col3X, row2Y + labelHeight, knobSize, knobSize);
+
+    loadIRButton.setBounds(col3X + 10, row2Y + labelHeight + knobSize + 10, 80, 24);
 }
