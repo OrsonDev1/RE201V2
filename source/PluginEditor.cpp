@@ -44,9 +44,10 @@ PluginEditor::PluginEditor(PluginProcessor& p)
                 processorRef.parameters, paramID, slider));
     };
 
-    setupSlider(wetDrySlider, wetDryLabel, "Wet/Dry", "wetDry");
-    setupSlider(reverbMixSlider, reverbMixLabel, "Reverb", "reverbMix");
+    setupSlider(masterMixSlider, masterMixLabel, "Master Mix", "wetDry");
+    setupSlider(reverbMixSlider, reverbMixLabel, "Reverb Mix", "reverbMix");
     setupSlider(masterGainSlider, masterGainLabel, "Master Gain", "masterGain");
+    setupSlider(echoMixSlider, echoMixLabel, "Echo Mix", "echoMix");
 
     // --- Effect knobs ---
     setupSlider(delayTimeSlider, delayLabel, "Delay Time", "delayTime");
@@ -96,7 +97,7 @@ void PluginEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white);
     g.setFont(16.0f);
     auto titleText = juce::String("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION +
-                     " v0.0.11 running in " + CMAKE_BUILD_TYPE;
+                     " v0.1.2 running in " + CMAKE_BUILD_TYPE;
     g.drawText(titleText, getLocalBounds().removeFromTop(150), juce::Justification::top, false);
 }
 
@@ -121,8 +122,8 @@ void PluginEditor::resized()
     int labelHeight = 20;
     int knobY = headStartY + 3 * (headHeight + headSpacing) + 30;
 
-    wetDrySlider.setBounds(area.getX() + 20, knobY + labelHeight, knobSize, knobSize);
-    wetDryLabel.setBounds(wetDrySlider.getX(), knobY, knobSize, labelHeight);
+    masterMixSlider.setBounds(area.getX() + 20, knobY + labelHeight, knobSize, knobSize);
+    masterMixLabel.setBounds(masterMixSlider.getX(), knobY, knobSize, labelHeight);
 
     masterGainSlider.setBounds(area.getX() + 40 + knobSize, knobY + labelHeight, knobSize, knobSize);
     masterGainLabel.setBounds(masterGainSlider.getX(), knobY, knobSize, labelHeight);
@@ -147,7 +148,7 @@ void PluginEditor::resized()
     saturationLabel.setBounds(rightX, row3Y, knobSize, labelHeight);
     saturationSlider.setBounds(rightX, row3Y + labelHeight, knobSize, knobSize);
 
-    // Column 2 (Wow, Flutter)
+    // Column 2 (Wow, Flutter, Echo Mix)
     int col2X = rightX + colSpacing;
 
     wowLabel.setBounds(col2X, row1Y, knobSize, labelHeight);
@@ -156,11 +157,16 @@ void PluginEditor::resized()
     flutterLabel.setBounds(col2X, row2Y, knobSize, labelHeight);
     flutterSlider.setBounds(col2X, row2Y + labelHeight, knobSize, knobSize);
 
-    // Column 3 (Reverb Mix) - To the right of Flutter
+    // FIX: Added Echo Mix Slider here (Row 3, Column 2)
+    echoMixLabel.setBounds(col2X, row3Y, knobSize, labelHeight);
+    echoMixSlider.setBounds(col2X, row3Y + labelHeight, knobSize, knobSize);
+
+    // Column 3 (Reverb Mix & IR Button)
     int col3X = rightX + (colSpacing * 2);
 
     reverbMixLabel.setBounds(col3X, row2Y, knobSize, labelHeight);
     reverbMixSlider.setBounds(col3X, row2Y + labelHeight, knobSize, knobSize);
 
+    // Place IR Button below Reverb
     loadIRButton.setBounds(col3X + 10, row2Y + labelHeight + knobSize + 10, 80, 24);
 }

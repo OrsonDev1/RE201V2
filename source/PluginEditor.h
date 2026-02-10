@@ -38,11 +38,14 @@ private:
     juce::Slider wowSlider;
     juce::Slider flutterSlider;
     //wet dry
-    juce::Slider wetDrySlider;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wetDryAttachment;
+    juce::Slider masterMixSlider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterMixAttachment;
     juce::Slider masterGainSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterGainAttachment;
     juce::Slider reverbMixSlider;
+    juce::Slider echoMixSlider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> echoMixAttachment;
+
 
 
 
@@ -59,9 +62,10 @@ private:
     juce::Label saturationLabel;
     juce::Label wowLabel;
     juce::Label flutterLabel;
-    juce::Label wetDryLabel;
+    juce::Label masterMixLabel;
     juce::Label masterGainLabel;
     juce::Label reverbMixLabel;
+    juce::Label echoMixLabel;
     juce::TextButton loadIRButton { "Load IR" };
     std::unique_ptr<juce::FileChooser> fileChooser;
 

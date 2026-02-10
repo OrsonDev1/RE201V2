@@ -51,7 +51,8 @@ public:
     std::atomic<float>* saturationParam  = nullptr;
     std::atomic<float>* wowParam         = nullptr;
     std::atomic<float>* flutterParam     = nullptr;
-    std::atomic<float>* wetDryParam      = nullptr;
+    std::atomic<float>* echoMixParam     = nullptr;
+    std::atomic<float>* masterMixParam   = nullptr;
     std::atomic<float>* masterGainParam  = nullptr;
     std::atomic<float>* reverbMixParam   = nullptr;
 
