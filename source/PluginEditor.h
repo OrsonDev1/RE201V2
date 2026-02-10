@@ -44,7 +44,10 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterGainAttachment;
     juce::Slider reverbMixSlider;
     juce::Slider echoMixSlider;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> echoMixAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> echoMixAttachment;\
+    juce::TextButton resetIRButton { "X" }; // Small reset button
+
+    RetroLookAndFeel myLookAndFeel;
 
 
 

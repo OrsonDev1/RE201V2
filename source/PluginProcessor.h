@@ -3,6 +3,83 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <vector>
+class RetroLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    RetroLookAndFeel()
+    {
+        // Set standard text colours
+        setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+        setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    }
+
+    // --- 1. VINTAGE KNOBS (Silver & Dark Grey) ---
+    void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+        const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider) override
+    {
+        auto radius = (float)juce::jmin(width / 2, height / 2) - 4.0f;
+        auto centreX = (float)x + (float)width * 0.5f;
+        auto centreY = (float)y + (float)height * 0.5f;
+        auto rx = centreX - radius;
+        auto ry = centreY - radius;
+        auto rw = radius * 2.0f;
+        auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+
+        // A. Knob Body (Dark recessed circle)
+        g.setColour(juce::Colour(0xff202020));
+        g.fillEllipse(rx, ry, rw, rw);
+
+        // B. Knob Outline (Silver ring)
+        g.setColour(juce::Colours::grey);
+        g.drawEllipse(rx, ry, rw, rw, 2.0f);
+
+        // C. Pointer (White Line)
+        juce::Path p;
+        auto pointerLength = radius * 0.8f;
+        auto pointerThickness = 3.0f;
+        p.addRectangle(-pointerThickness * 0.5f, -radius, pointerThickness, pointerLength);
+        p.applyTransform(juce::AffineTransform::rotation(angle).translated(centreX, centreY));
+
+        g.setColour(juce::Colours::white);
+        g.fillPath(p);
+    }
+
+    // --- 2. TAPE SWITCHES (Green LED Style) ---
+    void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button,
+        bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    {
+        auto area = button.getLocalBounds().reduced(2);
+
+        // A. Background (Dark Plastic)
+        g.setColour(juce::Colour(0xff101010));
+        g.fillRoundedRectangle(area.toFloat(), 4.0f);
+        g.setColour(juce::Colours::grey);
+        g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
+
+        // B. Active State (Green LED light)
+        if (button.getToggleState())
+        {
+            // Main Light
+            g.setColour(juce::Colours::lightgreen.withAlpha(0.9f));
+            g.fillRoundedRectangle(area.reduced(4).toFloat(), 3.0f);
+
+            // Outer Glow
+            g.setColour(juce::Colours::lightgreen.withAlpha(0.4f));
+            g.fillRoundedRectangle(area.reduced(2).toFloat(), 4.0f);
+        }
+
+        // C. Text Label
+        g.setColour(juce::Colours::white);
+        g.setFont(juce::Font(14.0f, juce::Font::bold));
+        g.drawText(button.getButtonText(), area, juce::Justification::centred, false);
+    }
+
+    // Optional: Ensure labels are bold
+    juce::Font getLabelFont(juce::Label&) override
+    {
+        return juce::Font(14.0f, juce::Font::bold);
+    }
+};
 
 class PluginProcessor : public juce::AudioProcessor
 {
@@ -77,6 +154,7 @@ public:
 
     // Helper for IR loading
     void loadImpulseResponse(const juce::File& irFile, bool stereo = true);
+    void loadDefaultIR();
 
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)

@@ -4,6 +4,7 @@
 PluginEditor::PluginEditor(PluginProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
+    setLookAndFeel(&myLookAndFeel);
     // --- Inspect button ---
     addAndMakeVisible(inspectButton);
     inspectButton.onClick = [&] {
@@ -24,10 +25,16 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     head1Button.setToggleState(processorRef.headEnabled[0], juce::dontSendNotification);
     head2Button.setToggleState(processorRef.headEnabled[1], juce::dontSendNotification);
     head3Button.setToggleState(processorRef.headEnabled[2], juce::dontSendNotification);
+    head1Button.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
+    head2Button.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
+    head3Button.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
 
     head1Button.onClick = [this] { processorRef.headEnabled[0] = head1Button.getToggleState(); };
     head2Button.onClick = [this] { processorRef.headEnabled[1] = head2Button.getToggleState(); };
     head3Button.onClick = [this] { processorRef.headEnabled[2] = head3Button.getToggleState(); };
+    head1Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
+    head2Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
+    head3Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
 
     // --- Wet/Dry and Master Gain ---
     auto setupSlider = [&](juce::Slider& slider, juce::Label& label, const char* text, const char* paramID) {
@@ -38,6 +45,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
         label.setText(text, juce::dontSendNotification);
         label.setJustificationType(juce::Justification::centred);
         addAndMakeVisible(label);
+        label.setColour(juce::Label::textColourId, juce::Colours::black);
 
         if (paramID)
             attachments.emplace_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -84,89 +92,106 @@ PluginEditor::PluginEditor(PluginProcessor& p)
             }
         });
     };
+    // --- Reset IR Button ---
+    addAndMakeVisible(resetIRButton);
+    resetIRButton.setTooltip("Reset to Stock Reverb");
+    resetIRButton.onClick = [this] { processorRef.loadDefaultIR(); };
 }
 
 PluginEditor::~PluginEditor() {
+    setLookAndFeel(nullptr);
     attachments.clear(); // destroy attachments first
 }
 
 
 void PluginEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
-    g.setColour(juce::Colours::white);
-    g.setFont(16.0f);
-    auto titleText = juce::String("Bonjour from ") + PRODUCT_NAME_WITHOUT_VERSION +
-                     " v0.1.2 running in " + CMAKE_BUILD_TYPE;
-    g.drawText(titleText, getLocalBounds().removeFromTop(150), juce::Justification::top, false);
+    // 1. Background (The Case - light grey Tolex style)
+    g.fillAll(juce::Colour(0x6dc1cbc1));
+
+    // 2. The Faceplate (Green/Black area where knobs live)
+    auto area = getLocalBounds().reduced(10);
+    auto faceplate = area.removeFromBottom(area.getHeight() - 50); // Leave room for top title
+
+    g.setColour(juce::Colour(0xcc24a12a)); // green panel
+    g.fillRoundedRectangle(faceplate.toFloat(), 10.0f);
+    g.setColour(juce::Colours::black);
+    g.drawRoundedRectangle(faceplate.toFloat(), 10.0f, 2.0f);
+
+    // 3. Draw Section Dividers (Lines)
+    g.setColour(juce::Colours::black.withAlpha(0.3f));
+    // Example line separating Heads from Knobs
+    g.drawLine(200, faceplate.getY() + 10, 200, faceplate.getBottom() - 10, 1.0f);
+
+    // 4. Title
+    g.setColour(juce::Colours::black);
+    g.setFont(24.0f);
+    g.drawText("SPACE ECHO RE-201 Version 0.1.3", area.removeFromTop(40), juce::Justification::centred, false);
 }
 
 void PluginEditor::resized()
 {
     auto area = getLocalBounds().reduced(20);
-    area.removeFromTop(20);
+    area.removeFromTop(40); // Skip title
 
-    // --- Left Side: Heads & Master Section ---
-    int headWidth = 80;
-    int headHeight = 40;
-    int headSpacing = 20;
-    int headStartY = area.getY() + 20;
+    // --- BOTTOM MIXER STRIP (Master Section) ---
+    auto bottomStrip = area.removeFromBottom(120);
+    int mixKnobWidth = bottomStrip.getWidth() / 4;
 
-    // 1. Head Buttons (Top Left)
-    head1Button.setBounds(area.getX() + 20, headStartY, headWidth, headHeight);
-    head2Button.setBounds(area.getX() + 20, headStartY + headHeight + headSpacing, headWidth, headHeight);
-    head3Button.setBounds(area.getX() + 20, headStartY + 2 * (headHeight + headSpacing), headWidth, headHeight);
+    echoMixLabel.setBounds(bottomStrip.getX(), bottomStrip.getY(), mixKnobWidth, 20);
+    echoMixSlider.setBounds(bottomStrip.getX(), bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // 2. Master Section (Bottom Left)
-    int knobSize = 100;
-    int labelHeight = 20;
-    int knobY = headStartY + 3 * (headHeight + headSpacing) + 30;
+    reverbMixLabel.setBounds(bottomStrip.getX() + mixKnobWidth, bottomStrip.getY(), mixKnobWidth, 20);
+    reverbMixSlider.setBounds(bottomStrip.getX() + mixKnobWidth, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    masterMixSlider.setBounds(area.getX() + 20, knobY + labelHeight, knobSize, knobSize);
-    masterMixLabel.setBounds(masterMixSlider.getX(), knobY, knobSize, labelHeight);
+    // FIX 1: Split space for Load and Reset buttons
+    int buttonY = reverbMixSlider.getBottom() + 5;
+    int loadBtnWidth = mixKnobWidth - 40; // Make room for reset
+    loadIRButton.setBounds(reverbMixSlider.getX(), buttonY, loadBtnWidth, 20);
 
-    masterGainSlider.setBounds(area.getX() + 40 + knobSize, knobY + labelHeight, knobSize, knobSize);
-    masterGainLabel.setBounds(masterGainSlider.getX(), knobY, knobSize, labelHeight);
+    // Place "X" button to the right of "Load"
+    resetIRButton.setBounds(loadIRButton.getRight() + 5, buttonY, 25, 20);
 
-    // --- Right Side: Effects Grid ---
-    int rightX = area.getX() + 300;
-    int verticalSpacing = 40;
-    int colSpacing = 120; // Distance between columns
+    masterMixLabel.setBounds(bottomStrip.getX() + mixKnobWidth * 2, bottomStrip.getY(), mixKnobWidth, 20);
+    masterMixSlider.setBounds(bottomStrip.getX() + mixKnobWidth * 2, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // Calculate Row Y positions
-    int row1Y = area.getY();
-    int row2Y = row1Y + labelHeight + knobSize + verticalSpacing;
-    int row3Y = row2Y + labelHeight + knobSize + verticalSpacing;
+    masterGainLabel.setBounds(bottomStrip.getX() + mixKnobWidth * 3, bottomStrip.getY(), mixKnobWidth, 20);
+    masterGainSlider.setBounds(bottomStrip.getX() + mixKnobWidth * 3, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // Column 1 (Delay, Feedback, Saturation)
-    delayLabel.setBounds(rightX, row1Y, knobSize, labelHeight);
-    delayTimeSlider.setBounds(rightX, row1Y + labelHeight, knobSize, knobSize);
+    // --- LEFT COLUMN (Heads) ---
+    auto leftCol = area.removeFromLeft(150);
+    int buttonHeight = 40;
+    int startY = leftCol.getY() + 40;
 
-    feedbackLabel.setBounds(rightX, row2Y, knobSize, labelHeight);
-    feedbackSlider.setBounds(rightX, row2Y + labelHeight, knobSize, knobSize);
+    head1Button.setBounds(leftCol.getX() + 10, startY, 100, buttonHeight);
+    head2Button.setBounds(leftCol.getX() + 10, startY + 50, 100, buttonHeight);
+    head3Button.setBounds(leftCol.getX() + 10, startY + 100, 100, buttonHeight);
 
-    saturationLabel.setBounds(rightX, row3Y, knobSize, labelHeight);
-    saturationSlider.setBounds(rightX, row3Y + labelHeight, knobSize, knobSize);
+    // --- REMAINING AREA (Tape Controls) ---
+    int knobSize = 90;
+    int spacing = 20;
+    int gridStartX = area.getX() + 20;
+    int gridStartY = area.getY() + 20;
 
-    // Column 2 (Wow, Flutter, Echo Mix)
-    int col2X = rightX + colSpacing;
+    // Row 1
+    delayLabel.setBounds(gridStartX, gridStartY, knobSize, 20);
+    delayTimeSlider.setBounds(gridStartX, gridStartY + 20, knobSize, knobSize);
 
-    wowLabel.setBounds(col2X, row1Y, knobSize, labelHeight);
-    wowSlider.setBounds(col2X, row1Y + labelHeight, knobSize, knobSize);
+    feedbackLabel.setBounds(gridStartX + knobSize + spacing, gridStartY, knobSize, 20);
+    feedbackSlider.setBounds(gridStartX + knobSize + spacing, gridStartY + 20, knobSize, knobSize);
 
-    flutterLabel.setBounds(col2X, row2Y, knobSize, labelHeight);
-    flutterSlider.setBounds(col2X, row2Y + labelHeight, knobSize, knobSize);
+    // FIX 2: Widen the Saturation Label
+    // We expand width by 40px (20px each side) so text doesn't squish
+    int satX = gridStartX + (knobSize + spacing) * 2;
+    saturationLabel.setBounds(satX - 20, gridStartY, knobSize + 40, 20);
+    saturationSlider.setBounds(satX, gridStartY + 20, knobSize, knobSize);
 
-    // FIX: Added Echo Mix Slider here (Row 3, Column 2)
-    echoMixLabel.setBounds(col2X, row3Y, knobSize, labelHeight);
-    echoMixSlider.setBounds(col2X, row3Y + labelHeight, knobSize, knobSize);
+    // Row 2
+    int row2Y = gridStartY + knobSize + 40;
 
-    // Column 3 (Reverb Mix & IR Button)
-    int col3X = rightX + (colSpacing * 2);
+    wowLabel.setBounds(gridStartX, row2Y, knobSize, 20);
+    wowSlider.setBounds(gridStartX, row2Y + 20, knobSize, knobSize);
 
-    reverbMixLabel.setBounds(col3X, row2Y, knobSize, labelHeight);
-    reverbMixSlider.setBounds(col3X, row2Y + labelHeight, knobSize, knobSize);
-
-    // Place IR Button below Reverb
-    loadIRButton.setBounds(col3X + 10, row2Y + labelHeight + knobSize + 10, 80, 24);
+    flutterLabel.setBounds(gridStartX + knobSize + spacing, row2Y, knobSize, 20);
+    flutterSlider.setBounds(gridStartX + knobSize + spacing, row2Y + 20, knobSize, knobSize);
 }

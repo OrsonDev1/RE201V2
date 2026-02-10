@@ -21,7 +21,7 @@ parameters(*this, nullptr, "PARAMETERS", {
 
     std::make_unique<juce::AudioParameterFloat>("wetDry", "Master Mix", 0.0f, 1.0f, 0.5f),
 
-    std::make_unique<juce::AudioParameterFloat>("reverbMix", "Reverb Mix", 0.0f, 1.0f, 0.0f),
+    std::make_unique<juce::AudioParameterFloat>("reverbMix", "Reverb Mix", 0.0f, 1.0f, 0.2f),
     std::make_unique<juce::AudioParameterFloat>("echoMix", "Echo Mix", 0.0f, 1.0f, 0.5f),
     std::make_unique<juce::AudioParameterFloat>("masterGain", "Master Gain", -60.0f, 12.0f, 0.0f)
 
@@ -281,6 +281,23 @@ void PluginProcessor::loadImpulseResponse(const juce::File& irFile, bool stereo)
         juce::dsp::Convolution::Normalise::yes
     );
 }
+
+void PluginProcessor::loadDefaultIR()
+{
+    // Reload the binary asset
+    if (BinaryData::DefaultReverbIR_wavSize > 0)
+    {
+        reverbConvolver.loadImpulseResponse(
+            BinaryData::DefaultReverbIR_wav,
+            static_cast<size_t>(BinaryData::DefaultReverbIR_wavSize),
+            juce::dsp::Convolution::Stereo::yes,
+            juce::dsp::Convolution::Trim::no,
+            static_cast<size_t>(BinaryData::DefaultReverbIR_wavSize),
+            juce::dsp::Convolution::Normalise::yes
+        );
+    }
+}
+
 //==============================================================================
 juce::AudioProcessorEditor* PluginProcessor::createEditor()
 {
