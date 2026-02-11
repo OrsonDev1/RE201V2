@@ -23,7 +23,9 @@ parameters(*this, nullptr, "PARAMETERS", {
 
     std::make_unique<juce::AudioParameterFloat>("reverbMix", "Reverb Mix", 0.0f, 1.0f, 0.2f),
     std::make_unique<juce::AudioParameterFloat>("echoMix", "Echo Mix", 0.0f, 1.0f, 0.5f),
-    std::make_unique<juce::AudioParameterFloat>("masterGain", "Master Gain", -60.0f, 12.0f, 0.0f)
+    std::make_unique<juce::AudioParameterFloat>("masterGain", "Master Gain", -60.0f, 12.0f, 0.0f),
+    std::make_unique<juce::AudioParameterFloat>("bass", "Bass", -6.0f, 6.0f, 0.0f),
+    std::make_unique<juce::AudioParameterFloat>("treble", "Treble", -6.0f, 6.0f, 0.0f)
 
 })
 
@@ -37,6 +39,8 @@ parameters(*this, nullptr, "PARAMETERS", {
     echoMixParam        = parameters.getRawParameterValue ("echoMix");
     reverbMixParam   = parameters.getRawParameterValue("reverbMix");
     masterGainParam  = parameters.getRawParameterValue("masterGain");
+    bassParam = parameters.getRawParameterValue("bass");
+    trebleParam = parameters.getRawParameterValue("treble");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -46,11 +50,10 @@ PluginProcessor::~PluginProcessor()
 //==============================================================================
 void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    // --- Delay buffer setup ---
+    // --- 1. Delay Buffer Setup ---
     const float maxDelayTimeMs = 2000.0f * 2.85f;
     const int maxDelaySamples = static_cast<int>(sampleRate * maxDelayTimeMs / 1000.0);
 
-    // Allocate 2 channels (Stereo) with the calculated size
     delayBuffer.setSize(2, maxDelaySamples);
     delayBuffer.clear();
 
@@ -61,22 +64,24 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     if (delayTimeParam)
         smoothedDelayTime.setCurrentAndTargetValue(delayTimeParam->load());
 
-    // --- DSP spec for Convolver and other modules ---
-    juce::dsp::ProcessSpec spec {
-        sampleRate,
-        static_cast<juce::uint32>(samplesPerBlock),
-        static_cast<juce::uint32>(getTotalNumOutputChannels())
-    };
+    // --- 2. Initialize EQ Filters ---
+    bassFilters.resize(getTotalNumOutputChannels());
+    trebleFilters.resize(getTotalNumOutputChannels());
 
+    for (auto& f : bassFilters) f.reset();
+    for (auto& f : trebleFilters) f.reset();
+
+    // --- 3. DSP Spec Setup (Define this ONLY ONCE) ---
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
+    spec.numChannels = static_cast<juce::uint32>(getTotalNumOutputChannels());
+
+    // --- 4. Prepare Reverb ---
     reverbConvolver.prepare(spec);
+    reverbConvolver.reset();
 
-    // --- Modulation LFO init ---
-    wowPhase = 0.0f;
-    flutterPhase = 0.0f;
-    wowRate = 0.1f;
-    flutterRate = 1.0f;
-
-    // --- Load embedded impulse response ---
+    // --- 5. Load Default Impulse Response ---
     if (BinaryData::DefaultReverbIR_wavSize > 0)
     {
         reverbConvolver.loadImpulseResponse(
@@ -89,8 +94,11 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         );
     }
 
-    // Prevent unused warnings
-    juce::ignoreUnused(sampleRate, samplesPerBlock);
+    // --- 6. Modulation LFO Init ---
+    wowPhase = 0.0f;
+    flutterPhase = 0.0f;
+    wowRate = 0.1f;    // 0.1 Hz base rate
+    flutterRate = 1.0f; // 1.0 Hz base rate
 }
 
 void PluginProcessor::releaseResources()
@@ -121,6 +129,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 {
     const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
+    const float sampleRate = static_cast<float>(getSampleRate());
 
     // --- 1. Load Parameters ---
     float delayTimeMs   = 500.0f;
@@ -128,10 +137,12 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     float saturation    = 0.5f;
     float wowAmount     = 0.0f;
     float flutterAmount = 0.0f;
-    float echoVol       = 0.5f;  // Controls Tape Volume
-    float reverbVol     = 0.0f;  // Controls Reverb Volume
-    float masterMix     = 0.5f;  // Controls Global Dry/Wet
+    float echoVol       = 0.5f;
+    float reverbVol     = 0.0f;
+    float masterMix     = 0.5f;
     float masterGainDb  = 0.0f;
+    float bassDb        = 0.0f; // New
+    float trebleDb      = 0.0f; // New
 
     if (delayTimeParam)   delayTimeMs   = delayTimeParam->load();
     if (feedbackParam)    feedback      = feedbackParam->load();
@@ -141,35 +152,58 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
     if (echoMixParam)     echoVol       = echoMixParam->load();
     if (reverbMixParam)   reverbVol     = reverbMixParam->load();
-    if (masterMixParam)   masterMix     = masterMixParam->load(); // Linked to "wetDry" ID
+    if (masterMixParam)   masterMix     = masterMixParam->load();
     if (masterGainParam)  masterGainDb  = masterGainParam->load();
 
-    // Prepare Master Mix Gains (Constant Power Law)
-    // This prevents volume drop in the middle of the mix knob
+    // Load EQ Params
+    if (bassParam)        bassDb        = bassParam->load();
+    if (trebleParam)      trebleDb      = trebleParam->load();
+
+    // --- 2. Update Filter Coefficients (Once per block for efficiency) ---
+    // Note: We use the JUCE IIRCoefficients helper to calculate the math
+    {
+        float bassGain = juce::Decibels::decibelsToGain(bassDb);
+        float trebleGain = juce::Decibels::decibelsToGain(trebleDb);
+
+        // Low Shelf at 150Hz (Typical RE-201 Bass freq)
+        auto bassCoeffs = juce::IIRCoefficients::makeLowShelf(sampleRate, 150.0, 0.707, bassGain);
+
+        // High Shelf at 3kHz (Typical RE-201 Treble freq)
+        auto trebleCoeffs = juce::IIRCoefficients::makeHighShelf(sampleRate, 3000.0, 0.707, trebleGain);
+
+        // Resize vectors if needed (safety check)
+        if (bassFilters.size() != numChannels) bassFilters.resize(numChannels);
+        if (trebleFilters.size() != numChannels) trebleFilters.resize(numChannels);
+
+        // Apply coefficients to every channel's filter
+        for (auto& f : bassFilters) f.setCoefficients(bassCoeffs);
+        for (auto& f : trebleFilters) f.setCoefficients(trebleCoeffs);
+    }
+
+    // --- 3. Prepare Buffers ---
+    // Prepare Master Mix Gains
     float globalDryGain = std::cos(masterMix * juce::MathConstants<float>::halfPi);
     float globalWetGain = std::sin(masterMix * juce::MathConstants<float>::halfPi);
 
-    // --- 2. Prepare Buffers ---
     // Snapshot the Clean Dry Input
     juce::AudioBuffer<float> dryBuffer;
     dryBuffer.makeCopyOf(buffer);
 
-    // Create a "Wet Layer" buffer to accumulate Echo + Reverb
+    // Create a "Wet Layer" buffer
     juce::AudioBuffer<float> wetAccumulator;
     wetAccumulator.setSize(numChannels, numSamples);
-    wetAccumulator.clear(); // Start silent
+    wetAccumulator.clear();
 
     if (delayBuffer.getNumSamples() == 0) return;
     const int bufSize = delayBuffer.getNumSamples();
-    const float sampleRate = static_cast<float>(getSampleRate());
 
-    // --- 3. Calculate Head Timings ---
+    // --- 4. Calculate Head Timings ---
     std::vector<float> currentHeadTimesSamples(3);
-    currentHeadTimesSamples[0] = (delayTimeMs * 0.364f) * (sampleRate / 1000.0f); // Head 1
-    currentHeadTimesSamples[1] = (delayTimeMs * 0.691f) * (sampleRate / 1000.0f); // Head 2
-    currentHeadTimesSamples[2] = (delayTimeMs * 1.000f) * (sampleRate / 1000.0f); // Head 3
+    currentHeadTimesSamples[0] = (delayTimeMs * 0.364f) * (sampleRate / 1000.0f);
+    currentHeadTimesSamples[1] = (delayTimeMs * 0.691f) * (sampleRate / 1000.0f);
+    currentHeadTimesSamples[2] = (delayTimeMs * 1.000f) * (sampleRate / 1000.0f);
 
-    // === 4. TAPE ECHO PROCESSING LOOP ===
+    // === 5. TAPE ECHO PROCESSING LOOP ===
     for (int i = 0; i < numSamples; ++i)
     {
         // A. Update LFOs
@@ -187,7 +221,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         for (int ch = 0; ch < numChannels; ++ch)
         {
             float* delayData = delayBuffer.getWritePointer(ch % 2);
-            float inputSample = dryBuffer.getReadPointer(ch)[i]; // Read from DRY snapshot
+            float inputSample = dryBuffer.getReadPointer(ch)[i];
 
             // --- Sum Active Heads ---
             float rawEchoSample = 0.0f;
@@ -207,17 +241,21 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
                 float sample = delayData[indexA] * (1.0f - frac) + delayData[indexB] * frac;
 
-                // IMPORTANT: Apply head volume levels here
                 rawEchoSample += sample * headLevels[head];
             }
 
+            // === EQ PROCESSING (New Step) ===
+            // Apply the filters to the raw echo BEFORE it feeds back or goes to output
+            rawEchoSample = bassFilters[ch].processSingleSampleRaw(rawEchoSample);
+            rawEchoSample = trebleFilters[ch].processSingleSampleRaw(rawEchoSample);
+
             // --- Feedback Loop ---
+            // The EQ'd signal is what gets fed back! (Authentic behavior)
             float feedbackSample = inputSample + (rawEchoSample * feedback);
             feedbackSample = std::tanh(feedbackSample * (1.0f + 5.0f * saturation));
             delayData[writeIndex] = feedbackSample;
 
             // --- Add to Wet Accumulator ---
-            // We multiply by Echo Volume here
             wetAccumulator.getWritePointer(ch)[i] += rawEchoSample * echoVol;
         }
 
@@ -225,26 +263,32 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         if (writeIndex >= bufSize) writeIndex = 0;
     }
 
-    // === 5. REVERB PROCESSING ===
+    // === 6. REVERB PROCESSING (Authentic Series) ===
     if (reverbEnabled && reverbVol > 0.0f)
     {
-        // We use the Dry Buffer as the source for the Reverb (Parallel)
+        // Prepare Reverb Input (Start with Dry)
         juce::AudioBuffer<float> reverbInput;
         reverbInput.makeCopyOf(dryBuffer);
 
+        // Mix Echoes into Reverb Input
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            reverbInput.addFrom(ch, 0, wetAccumulator, ch, 0, numSamples);
+        }
+
+        // Process Convolution
         juce::dsp::AudioBlock<float> block(reverbInput);
         juce::dsp::ProcessContextReplacing<float> ctx(block);
         reverbConvolver.process(ctx);
 
-        // Mix Reverb into the Wet Accumulator
+        // Mix Reverb into Wet Accumulator
         for (int ch = 0; ch < numChannels; ++ch)
         {
             wetAccumulator.addFrom(ch, 0, reverbInput, ch, 0, numSamples, reverbVol);
         }
     }
 
-    // === 6. FINAL MIX & OUTPUT ===
-    // Blend Dry Buffer and Wet Accumulator into the Main Output Buffer
+    // === 7. FINAL MIX & OUTPUT ===
     for (int ch = 0; ch < numChannels; ++ch)
     {
         auto* out = buffer.getWritePointer(ch);
@@ -253,10 +297,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
         for (int i = 0; i < numSamples; ++i)
         {
-            // Global Mix Blend
             out[i] = (dry[i] * globalDryGain) + (wet[i] * globalWetGain);
-
-            // Safety Limiter
             out[i] = juce::jlimit(-1.0f, 1.0f, out[i]);
         }
     }

@@ -9,7 +9,7 @@ public:
     RetroLookAndFeel()
     {
         // Set standard text colours
-        setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+        setColour(juce::Slider::textBoxTextColourId, juce::Colours::black);
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     }
 
@@ -51,10 +51,10 @@ public:
         auto area = button.getLocalBounds().reduced(2);
 
         // A. Background (Dark Plastic)
-        g.setColour(juce::Colour(0xff101010));
+        g.setColour(juce::Colour(0xccff0000));
         g.fillRoundedRectangle(area.toFloat(), 4.0f);
         g.setColour(juce::Colours::grey);
-        g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
+        g.drawRoundedRectangle(area.toFloat(), 4.0f, 8.0f);
 
         // B. Active State (Green LED light)
         if (button.getToggleState())
@@ -69,7 +69,7 @@ public:
         }
 
         // C. Text Label
-        g.setColour(juce::Colours::white);
+        g.setColour(juce::Colours::black);
         g.setFont(juce::Font(14.0f, juce::Font::bold));
         g.drawText(button.getButtonText(), area, juce::Justification::centred, false);
     }
@@ -156,6 +156,18 @@ public:
     void loadImpulseResponse(const juce::File& irFile, bool stereo = true);
     void loadDefaultIR();
 
+    // basic eq params
+    std::atomic<float>* bassParam = nullptr;
+    std::atomic<float>* trebleParam = nullptr;
+    std::vector<juce::IIRFilter> bassFilters;
+    std::vector<juce::IIRFilter> trebleFilters;
+
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
+    // We need 2 filters per channel (Bass + Treble).
+    // Using a ProcessorChain is the cleanest way in JUCE DSP.
+    using FilterType = juce::dsp::IIR::Filter<float>;
+    using FilterChain = juce::dsp::ProcessorChain<FilterType, FilterType>; // Filter 1 (Bass), Filter 2 (Treble)
+    using StereoFilter = juce::dsp::ProcessorDuplicator<FilterChain, juce::dsp::IIR::Coefficients<float>>;
+
 };

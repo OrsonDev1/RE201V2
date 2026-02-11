@@ -63,6 +63,8 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     setupSlider(saturationSlider, saturationLabel, "Tape Saturation", "saturation");
     setupSlider(wowSlider, wowLabel, "Wow", "wow");
     setupSlider(flutterSlider, flutterLabel, "Flutter", "flutter");
+    setupSlider(bassSlider, bassLabel, "Bass", "bass");
+    setupSlider(trebleSlider, trebleLabel, "Treble", "treble");
 
     setSize(700, 600);
 
@@ -126,7 +128,7 @@ void PluginEditor::paint(juce::Graphics& g)
     // 4. Title
     g.setColour(juce::Colours::black);
     g.setFont(24.0f);
-    g.drawText("SPACE ECHO RE-201 Version 0.1.3", area.removeFromTop(40), juce::Justification::centred, false);
+    g.drawText("SPACE ECHO RE-201 Version 0.1.4", area.removeFromTop(40), juce::Justification::centred, false);
 }
 
 void PluginEditor::resized()
@@ -144,12 +146,10 @@ void PluginEditor::resized()
     reverbMixLabel.setBounds(bottomStrip.getX() + mixKnobWidth, bottomStrip.getY(), mixKnobWidth, 20);
     reverbMixSlider.setBounds(bottomStrip.getX() + mixKnobWidth, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // FIX 1: Split space for Load and Reset buttons
+    // Load and Reset buttons
     int buttonY = reverbMixSlider.getBottom() + 5;
-    int loadBtnWidth = mixKnobWidth - 40; // Make room for reset
+    int loadBtnWidth = mixKnobWidth - 40;
     loadIRButton.setBounds(reverbMixSlider.getX(), buttonY, loadBtnWidth, 20);
-
-    // Place "X" button to the right of "Load"
     resetIRButton.setBounds(loadIRButton.getRight() + 5, buttonY, 25, 20);
 
     masterMixLabel.setBounds(bottomStrip.getX() + mixKnobWidth * 2, bottomStrip.getY(), mixKnobWidth, 20);
@@ -167,31 +167,45 @@ void PluginEditor::resized()
     head2Button.setBounds(leftCol.getX() + 10, startY + 50, 100, buttonHeight);
     head3Button.setBounds(leftCol.getX() + 10, startY + 100, 100, buttonHeight);
 
-    // --- REMAINING AREA (Tape Controls) ---
+    // --- MAIN EFFECTS GRID (Right Side) ---
     int knobSize = 90;
-    int spacing = 20;
+    int spacing = 20; // Horizontal spacing
+    int vSpacing = 10; // Vertical spacing between rows
+
+    // Starting coordinates for the grid
     int gridStartX = area.getX() + 20;
-    int gridStartY = area.getY() + 20;
+    int gridStartY = area.getY() + 10;
 
-    // Row 1
-    delayLabel.setBounds(gridStartX, gridStartY, knobSize, 20);
-    delayTimeSlider.setBounds(gridStartX, gridStartY + 20, knobSize, knobSize);
+    // --- ROW 1: Delay | Feedback | Saturation ---
+    int row1Y = gridStartY;
 
-    feedbackLabel.setBounds(gridStartX + knobSize + spacing, gridStartY, knobSize, 20);
-    feedbackSlider.setBounds(gridStartX + knobSize + spacing, gridStartY + 20, knobSize, knobSize);
+    delayLabel.setBounds(gridStartX, row1Y, knobSize, 20);
+    delayTimeSlider.setBounds(gridStartX, row1Y + 20, knobSize, knobSize);
 
-    // FIX 2: Widen the Saturation Label
-    // We expand width by 40px (20px each side) so text doesn't squish
+    feedbackLabel.setBounds(gridStartX + knobSize + spacing, row1Y, knobSize, 20);
+    feedbackSlider.setBounds(gridStartX + knobSize + spacing, row1Y + 20, knobSize, knobSize);
+
+    // Extra width for Saturation label so it doesn't squish
     int satX = gridStartX + (knobSize + spacing) * 2;
-    saturationLabel.setBounds(satX - 20, gridStartY, knobSize + 40, 20);
-    saturationSlider.setBounds(satX, gridStartY + 20, knobSize, knobSize);
+    saturationLabel.setBounds(satX - 10, row1Y, knobSize + 20, 20);
+    saturationSlider.setBounds(satX, row1Y + 20, knobSize, knobSize);
 
-    // Row 2
-    int row2Y = gridStartY + knobSize + 40;
+    // --- ROW 2: Wow | Flutter ---
+    int row2Y = row1Y + knobSize + 20 + vSpacing;
 
     wowLabel.setBounds(gridStartX, row2Y, knobSize, 20);
     wowSlider.setBounds(gridStartX, row2Y + 20, knobSize, knobSize);
 
     flutterLabel.setBounds(gridStartX + knobSize + spacing, row2Y, knobSize, 20);
     flutterSlider.setBounds(gridStartX + knobSize + spacing, row2Y + 20, knobSize, knobSize);
+
+    // --- ROW 3: Bass | Treble (NEW) ---
+    // Placing them under Wow/Flutter to fill the gap
+    int row3Y = row2Y + knobSize + 20 + vSpacing;
+
+    bassLabel.setBounds(gridStartX, row3Y, knobSize, 20);
+    bassSlider.setBounds(gridStartX, row3Y + 20, knobSize, knobSize);
+
+    trebleLabel.setBounds(gridStartX + knobSize + spacing, row3Y, knobSize, 20);
+    trebleSlider.setBounds(gridStartX + knobSize + spacing, row3Y + 20, knobSize, knobSize);
 }

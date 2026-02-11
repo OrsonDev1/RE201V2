@@ -45,6 +45,8 @@ private:
     juce::Slider reverbMixSlider;
     juce::Slider echoMixSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> echoMixAttachment;\
+    juce::Slider bassSlider;
+    juce::Slider trebleSlider;
     juce::TextButton resetIRButton { "X" }; // Small reset button
 
     RetroLookAndFeel myLookAndFeel;
@@ -69,6 +71,8 @@ private:
     juce::Label masterGainLabel;
     juce::Label reverbMixLabel;
     juce::Label echoMixLabel;
+    juce::Label bassLabel;
+    juce::Label trebleLabel;
     juce::TextButton loadIRButton { "Load IR" };
     std::unique_ptr<juce::FileChooser> fileChooser;
 
