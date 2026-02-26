@@ -156,12 +156,9 @@ private:
     juce::TextButton resetIRButton { "X" }; // Small reset button
 
     RetroLookAndFeel myLookAndFeel;
-
-
-
-
-
-
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> head1Attachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> head2Attachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> head3Attachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wowAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flutterAttachment;
 

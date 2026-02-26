@@ -56,8 +56,12 @@ public:
     std::atomic<float>* masterMixParam   = nullptr;
     std::atomic<float>* masterGainParam  = nullptr;
     std::atomic<float>* reverbMixParam   = nullptr;
+    std::atomic<float>* head1Param = nullptr;
+    std::atomic<float>* head2Param = nullptr;
+    std::atomic<float>* head3Param = nullptr;
 
     juce::SmoothedValue<float> smoothedDelayTime;
+
 
     // === Delay heads ===
     std::vector<float> headTimesMs = { 150.0f, 300.0f, 450.0f };

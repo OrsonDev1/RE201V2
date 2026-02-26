@@ -21,17 +21,10 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     addAndMakeVisible(head2Button);
     addAndMakeVisible(head3Button);
 
-    // FIX: Set initial toggle state to match the processor defaults (true)
-    head1Button.setToggleState(processorRef.headEnabled[0], juce::dontSendNotification);
-    head2Button.setToggleState(processorRef.headEnabled[1], juce::dontSendNotification);
-    head3Button.setToggleState(processorRef.headEnabled[2], juce::dontSendNotification);
-    head1Button.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
-    head2Button.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
-    head3Button.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
+    head1Attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "head1", head1Button);
+    head2Attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "head2", head2Button);
+    head3Attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "head3", head3Button);
 
-    head1Button.onClick = [this] { processorRef.headEnabled[0] = head1Button.getToggleState(); };
-    head2Button.onClick = [this] { processorRef.headEnabled[1] = head2Button.getToggleState(); };
-    head3Button.onClick = [this] { processorRef.headEnabled[2] = head3Button.getToggleState(); };
     head1Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
     head2Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
     head3Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
@@ -134,7 +127,7 @@ void PluginEditor::paint(juce::Graphics& g)
     // 4. Title
     g.setColour(juce::Colours::black);
     g.setFont(24.0f);
-    g.drawText("SPACE ECHO RE-201 Version 0.1.5", area.removeFromTop(40), juce::Justification::centred, false);
+    g.drawText("Cosmic Tape Delay 201 Version 0.9.0", area.removeFromTop(40), juce::Justification::centred, false);
 }
 
 void PluginEditor::resized()

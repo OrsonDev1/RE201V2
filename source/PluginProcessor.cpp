@@ -13,7 +13,7 @@ PluginProcessor::PluginProcessor()
 #endif
     ),
 parameters(*this, nullptr, "PARAMETERS", {
-    std::make_unique<juce::AudioParameterFloat>("delayTime", "Delay Time", 50.0f, 2000.0f, 500.0f),
+    std::make_unique<juce::AudioParameterFloat>("delayTime", "Delay Time", 50.0f, 600.0f, 300.0f),
     std::make_unique<juce::AudioParameterFloat>("feedback", "Feedback", 0.0f, 0.95f, 0.2f),
     std::make_unique<juce::AudioParameterFloat>("saturation", "Saturation", 0.0f, 1.0f, 0.2f),
     std::make_unique<juce::AudioParameterFloat>("wow", "Wow", 0.0f, 1.0f, 0.1f),
@@ -27,6 +27,10 @@ parameters(*this, nullptr, "PARAMETERS", {
     std::make_unique<juce::AudioParameterFloat>("bass", "Bass", -6.0f, 6.0f, 0.0f),
     std::make_unique<juce::AudioParameterFloat>("treble", "Treble", -6.0f, 6.0f, 0.0f),
     std::make_unique<juce::AudioParameterFloat>("inputGain", "Input Gain", -24.0f, 24.0f, 0.0f),
+
+    std::make_unique<juce::AudioParameterBool>("head1", "Head 1", true),
+    std::make_unique<juce::AudioParameterBool>("head2", "Head 2", true),
+    std::make_unique<juce::AudioParameterBool>("head3", "Head 3", true)
 
 })
 
@@ -43,6 +47,9 @@ parameters(*this, nullptr, "PARAMETERS", {
     bassParam = parameters.getRawParameterValue("bass");
     trebleParam = parameters.getRawParameterValue("treble");
     inputGainParam = parameters.getRawParameterValue("inputGain");
+    head1Param = parameters.getRawParameterValue("head1");
+    head2Param = parameters.getRawParameterValue("head2");
+    head3Param = parameters.getRawParameterValue("head3");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -62,7 +69,7 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     writeIndex = 0;
 
     // Smooth delay time changes
-    smoothedDelayTime.reset(sampleRate, 0.02); // 20ms smoothing
+    smoothedDelayTime.reset(sampleRate, 0.08); // 20ms smoothing
     if (delayTimeParam)
         smoothedDelayTime.setCurrentAndTargetValue(delayTimeParam->load());
 
@@ -134,7 +141,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float sampleRate = static_cast<float>(getSampleRate());
 
     // --- 1. Load Parameters ---
-    float delayTimeMs   = 500.0f;
     float feedback      = 0.4f;
     float saturation    = 0.5f;
     float wowAmount     = 0.0f;
@@ -143,21 +149,24 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     float reverbVol     = 0.0f;
     float masterMix     = 0.5f;
     float masterGainDb  = 0.0f;
-    float bassDb        = 0.0f; // New
-    float trebleDb      = 0.0f; // New
+    float bassDb        = 0.0f;
+    float trebleDb      = 0.0f;
 
-    if (delayTimeParam)   delayTimeMs   = delayTimeParam->load();
+    if (head1Param) headEnabled[0] = head1Param->load() > 0.5f;
+    if (head2Param) headEnabled[1] = head2Param->load() > 0.5f;
+    if (head3Param) headEnabled[2] = head3Param->load() > 0.5f;
+
+    // Feed target to smoother instead of loading instantly
+    if (delayTimeParam)   smoothedDelayTime.setTargetValue(delayTimeParam->load());
+
     if (feedbackParam)    feedback      = feedbackParam->load();
     if (saturationParam)  saturation    = saturationParam->load();
     if (wowParam)         wowAmount     = wowParam->load();
     if (flutterParam)     flutterAmount = flutterParam->load();
-
     if (echoMixParam)     echoVol       = echoMixParam->load();
     if (reverbMixParam)   reverbVol     = reverbMixParam->load();
     if (masterMixParam)   masterMix     = masterMixParam->load();
     if (masterGainParam)  masterGainDb  = masterGainParam->load();
-
-    // Load EQ Params
     if (bassParam)        bassDb        = bassParam->load();
     if (trebleParam)      trebleDb      = trebleParam->load();
 
@@ -171,7 +180,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     inputPeakLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
 
     // --- 2. Update Filter Coefficients (Once per block for efficiency) ---
-    // Note: We use the JUCE IIRCoefficients helper to calculate the math
     {
         float bassGain = juce::Decibels::decibelsToGain(bassDb);
         float trebleGain = juce::Decibels::decibelsToGain(trebleDb);
@@ -208,15 +216,21 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if (delayBuffer.getNumSamples() == 0) return;
     const int bufSize = delayBuffer.getNumSamples();
 
-    // --- 4. Calculate Head Timings ---
+    // --- 4. Declare Head Timings Array ---
     std::vector<float> currentHeadTimesSamples(3);
-    currentHeadTimesSamples[0] = (delayTimeMs * 0.364f) * (sampleRate / 1000.0f);
-    currentHeadTimesSamples[1] = (delayTimeMs * 0.691f) * (sampleRate / 1000.0f);
-    currentHeadTimesSamples[2] = (delayTimeMs * 1.000f) * (sampleRate / 1000.0f);
 
     // === 5. TAPE ECHO PROCESSING LOOP ===
     for (int i = 0; i < numSamples; ++i)
     {
+        // --- NEW: SMOOTH DELAY TIME GLIDE ---
+        // Get the current smoothed delay time for this exact sample
+        float currentDelayMs = smoothedDelayTime.getNextValue();
+
+        // Calculate where the heads should be right now
+        currentHeadTimesSamples[0] = (currentDelayMs * 0.364f) * (sampleRate / 1000.0f);
+        currentHeadTimesSamples[1] = (currentDelayMs * 0.691f) * (sampleRate / 1000.0f);
+        currentHeadTimesSamples[2] = (currentDelayMs * 1.000f) * (sampleRate / 1000.0f);
+
         // A. Update LFOs
         wowPhase += 2.0f * juce::MathConstants<float>::pi * wowRate / sampleRate;
         if (wowPhase >= 2.0f * juce::MathConstants<float>::pi) wowPhase -= 2.0f * juce::MathConstants<float>::pi;
@@ -255,13 +269,12 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 rawEchoSample += sample * headLevels[head];
             }
 
-            // === EQ PROCESSING (New Step) ===
+            // === EQ PROCESSING ===
             // Apply the filters to the raw echo BEFORE it feeds back or goes to output
             rawEchoSample = bassFilters[ch].processSingleSampleRaw(rawEchoSample);
             rawEchoSample = trebleFilters[ch].processSingleSampleRaw(rawEchoSample);
 
             // --- Feedback Loop ---
-            // The EQ'd signal is what gets fed back! (Authentic behavior)
             float feedbackSample = inputSample + (rawEchoSample * feedback);
             feedbackSample = std::tanh(feedbackSample * (1.0f + 5.0f * saturation));
             delayData[writeIndex] = feedbackSample;
@@ -394,8 +407,32 @@ void PluginProcessor::setCurrentProgram (int) {}
 const juce::String PluginProcessor::getProgramName (int) { return {}; }
 void PluginProcessor::changeProgramName (int, const juce::String&) {}
 
-void PluginProcessor::getStateInformation (juce::MemoryBlock& destData) { juce::ignoreUnused(destData); }
-void PluginProcessor::setStateInformation (const void* data, int sizeInBytes) { juce::ignoreUnused(data, sizeInBytes); }
+void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    // 1. Grab the current state of all your knobs from the APVTS
+    auto state = parameters.copyState();
+
+    // 2. Convert it into an XML object
+    std::unique_ptr<juce::XmlElement> xml (state.createXml());
+
+    // 3. Save it to the memory block the DAW provides
+    copyXmlToBinary (*xml, destData);
+}
+
+void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+    // 1. Read the saved binary data back into an XML object
+    std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+
+    // 2. If the XML is valid, load the values back into your knobs
+    if (xmlState.get() != nullptr)
+    {
+        if (xmlState->hasTagName (parameters.state.getType()))
+        {
+            parameters.replaceState (juce::ValueTree::fromXml (*xmlState));
+        }
+    }
+}
 
 //==============================================================================
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
