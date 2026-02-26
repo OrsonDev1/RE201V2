@@ -57,6 +57,10 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     setupSlider(masterGainSlider, masterGainLabel, "Master Gain", "masterGain");
     setupSlider(echoMixSlider, echoMixLabel, "Echo Mix", "echoMix");
 
+    setupSlider(inputGainSlider, inputGainLabel, "Input Gain", "inputGain");
+    addAndMakeVisible(peakLed);
+    startTimerHz(30); // Start the LED update timer
+
     // --- Effect knobs ---
     setupSlider(delayTimeSlider, delayLabel, "Delay Time", "delayTime");
     setupSlider(feedbackSlider, feedbackLabel, "Feedback", "feedback");
@@ -122,13 +126,15 @@ void PluginEditor::paint(juce::Graphics& g)
 
     // 3. Draw Section Dividers (Lines)
     g.setColour(juce::Colours::black.withAlpha(0.3f));
-    // Example line separating Heads from Knobs
-    g.drawLine(200, faceplate.getY() + 10, 200, faceplate.getBottom() - 10, 1.0f);
+
+    // FIX: Move line to X=170, and shorten the bottom (faceplate.getBottom() - 130)
+    // so it cleanly stops right above the master mixer strip.
+    g.drawLine(170.0f, faceplate.getY() + 10.0f, 170.0f, faceplate.getBottom() - 130.0f, 1.0f);
 
     // 4. Title
     g.setColour(juce::Colours::black);
     g.setFont(24.0f);
-    g.drawText("SPACE ECHO RE-201 Version 0.1.4", area.removeFromTop(40), juce::Justification::centred, false);
+    g.drawText("SPACE ECHO RE-201 Version 0.1.5", area.removeFromTop(40), juce::Justification::centred, false);
 }
 
 void PluginEditor::resized()
@@ -138,25 +144,42 @@ void PluginEditor::resized()
 
     // --- BOTTOM MIXER STRIP (Master Section) ---
     auto bottomStrip = area.removeFromBottom(120);
-    int mixKnobWidth = bottomStrip.getWidth() / 4;
 
-    echoMixLabel.setBounds(bottomStrip.getX(), bottomStrip.getY(), mixKnobWidth, 20);
-    echoMixSlider.setBounds(bottomStrip.getX(), bottomStrip.getY() + 20, mixKnobWidth, 80);
+    // FIX: Divide by 5 to make room for Input Gain
+    int mixKnobWidth = bottomStrip.getWidth() / 5;
 
-    reverbMixLabel.setBounds(bottomStrip.getX() + mixKnobWidth, bottomStrip.getY(), mixKnobWidth, 20);
-    reverbMixSlider.setBounds(bottomStrip.getX() + mixKnobWidth, bottomStrip.getY() + 20, mixKnobWidth, 80);
+    // 1. INPUT GAIN & LED (Col 0)
+    int col0 = bottomStrip.getX();
+    inputGainLabel.setBounds(col0, bottomStrip.getY(), mixKnobWidth, 20);
+    inputGainSlider.setBounds(col0, bottomStrip.getY() + 20, mixKnobWidth, 80);
+    // Place LED near the top right of the knob
+    peakLed.setBounds(col0 + mixKnobWidth - 30, bottomStrip.getY() + 10, 15, 15);
 
-    // Load and Reset buttons
+    // 2. ECHO MIX (Col 1)
+    int col1 = bottomStrip.getX() + mixKnobWidth;
+    echoMixLabel.setBounds(col1, bottomStrip.getY(), mixKnobWidth, 20);
+    echoMixSlider.setBounds(col1, bottomStrip.getY() + 20, mixKnobWidth, 80);
+
+    // 3. REVERB MIX (Col 2)
+    int col2 = bottomStrip.getX() + mixKnobWidth * 2;
+    reverbMixLabel.setBounds(col2, bottomStrip.getY(), mixKnobWidth, 20);
+    reverbMixSlider.setBounds(col2, bottomStrip.getY() + 20, mixKnobWidth, 80);
+
+    // Load and Reset buttons under Reverb Mix
     int buttonY = reverbMixSlider.getBottom() + 5;
     int loadBtnWidth = mixKnobWidth - 40;
-    loadIRButton.setBounds(reverbMixSlider.getX(), buttonY, loadBtnWidth, 20);
+    loadIRButton.setBounds(col2 + 5, buttonY, loadBtnWidth, 20);
     resetIRButton.setBounds(loadIRButton.getRight() + 5, buttonY, 25, 20);
 
-    masterMixLabel.setBounds(bottomStrip.getX() + mixKnobWidth * 2, bottomStrip.getY(), mixKnobWidth, 20);
-    masterMixSlider.setBounds(bottomStrip.getX() + mixKnobWidth * 2, bottomStrip.getY() + 20, mixKnobWidth, 80);
+    // 4. MASTER MIX (Col 3)
+    int col3 = bottomStrip.getX() + mixKnobWidth * 3;
+    masterMixLabel.setBounds(col3, bottomStrip.getY(), mixKnobWidth, 20);
+    masterMixSlider.setBounds(col3, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    masterGainLabel.setBounds(bottomStrip.getX() + mixKnobWidth * 3, bottomStrip.getY(), mixKnobWidth, 20);
-    masterGainSlider.setBounds(bottomStrip.getX() + mixKnobWidth * 3, bottomStrip.getY() + 20, mixKnobWidth, 80);
+    // 5. MASTER GAIN (Col 4)
+    int col4 = bottomStrip.getX() + mixKnobWidth * 4;
+    masterGainLabel.setBounds(col4, bottomStrip.getY(), mixKnobWidth, 20);
+    masterGainSlider.setBounds(col4, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
     // --- LEFT COLUMN (Heads) ---
     auto leftCol = area.removeFromLeft(150);
@@ -199,8 +222,7 @@ void PluginEditor::resized()
     flutterLabel.setBounds(gridStartX + knobSize + spacing, row2Y, knobSize, 20);
     flutterSlider.setBounds(gridStartX + knobSize + spacing, row2Y + 20, knobSize, knobSize);
 
-    // --- ROW 3: Bass | Treble (NEW) ---
-    // Placing them under Wow/Flutter to fill the gap
+    // --- ROW 3: BASS & TREBLE ---
     int row3Y = row2Y + knobSize + 20 + vSpacing;
 
     bassLabel.setBounds(gridStartX, row3Y, knobSize, 20);
@@ -208,4 +230,16 @@ void PluginEditor::resized()
 
     trebleLabel.setBounds(gridStartX + knobSize + spacing, row3Y, knobSize, 20);
     trebleSlider.setBounds(gridStartX + knobSize + spacing, row3Y + 20, knobSize, knobSize);
+}
+void PluginEditor::timerCallback()
+{
+    // 0.95f is almost clipping (digital absolute zero is 1.0f)
+    float currentPeak = processorRef.inputPeakLevel.load();
+
+    if (currentPeak >= 0.95f)
+        ledDecay = 1.0f; // Flash bright!
+    else
+        ledDecay *= 0.85f; // Fade out smoothly
+
+    peakLed.setBrightness(ledDecay);
 }

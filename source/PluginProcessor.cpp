@@ -25,7 +25,8 @@ parameters(*this, nullptr, "PARAMETERS", {
     std::make_unique<juce::AudioParameterFloat>("echoMix", "Echo Mix", 0.0f, 1.0f, 0.5f),
     std::make_unique<juce::AudioParameterFloat>("masterGain", "Master Gain", -60.0f, 12.0f, 0.0f),
     std::make_unique<juce::AudioParameterFloat>("bass", "Bass", -6.0f, 6.0f, 0.0f),
-    std::make_unique<juce::AudioParameterFloat>("treble", "Treble", -6.0f, 6.0f, 0.0f)
+    std::make_unique<juce::AudioParameterFloat>("treble", "Treble", -6.0f, 6.0f, 0.0f),
+    std::make_unique<juce::AudioParameterFloat>("inputGain", "Input Gain", -24.0f, 24.0f, 0.0f),
 
 })
 
@@ -41,6 +42,7 @@ parameters(*this, nullptr, "PARAMETERS", {
     masterGainParam  = parameters.getRawParameterValue("masterGain");
     bassParam = parameters.getRawParameterValue("bass");
     trebleParam = parameters.getRawParameterValue("treble");
+    inputGainParam = parameters.getRawParameterValue("inputGain");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -158,6 +160,15 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     // Load EQ Params
     if (bassParam)        bassDb        = bassParam->load();
     if (trebleParam)      trebleDb      = trebleParam->load();
+
+    float inputGainDb = 0.0f;
+    if (inputGainParam) inputGainDb = inputGainParam->load();
+
+    // Apply the gain to the incoming audio
+    buffer.applyGain(juce::Decibels::decibelsToGain(inputGainDb));
+
+    // Measure the loudest sample in this block and store it for the GUI LED
+    inputPeakLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
 
     // --- 2. Update Filter Coefficients (Once per block for efficiency) ---
     // Note: We use the JUCE IIRCoefficients helper to calculate the math
