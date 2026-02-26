@@ -59,6 +59,8 @@ public:
     std::atomic<float>* head1Param = nullptr;
     std::atomic<float>* head2Param = nullptr;
     std::atomic<float>* head3Param = nullptr;
+    std::atomic<float>* bypassParam = nullptr;
+    std::atomic<float>* killDryParam = nullptr;
 
     juce::SmoothedValue<float> smoothedDelayTime;
 

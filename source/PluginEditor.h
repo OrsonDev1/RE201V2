@@ -178,10 +178,17 @@ private:
     juce::Label trebleLabel;
     juce::TextButton loadIRButton { "Load IR" };
     std::unique_ptr<juce::FileChooser> fileChooser;
+    juce::ToggleButton bypassButton { "Bypass" };
+    juce::ToggleButton killDryButton { "Kill Dry" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> killDryAttachment;
+    juce::TextButton initButton { "Reset All" };
 
     juce::Slider inputGainSlider;
     juce::Label inputGainLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputGainAttachment;
+
+    juce::SharedResourcePointer<juce::TooltipWindow> tooltipWindow;
 
     OverloadLED peakLed;
     float ledDecay = 0.0f;

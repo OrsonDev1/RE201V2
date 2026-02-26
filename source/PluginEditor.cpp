@@ -29,6 +29,36 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     head2Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
     head3Button.setColour(juce::ToggleButton::tickColourId, juce::Colours::black);
 
+    //bypass and dry kill buttons
+    addAndMakeVisible(bypassButton);
+    addAndMakeVisible(killDryButton);
+
+    bypassButton.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
+    killDryButton.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
+
+    bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "bypass", bypassButton);
+    killDryAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "killDry", killDryButton);
+
+    //reset
+    addAndMakeVisible(initButton);
+    initButton.setTooltip("Resets all parameters to their default 'Ground Zero' values.");
+
+    // The Reset Logic
+    initButton.onClick = [this]
+    {
+        // Loop through every single parameter in the plugin
+        for (auto* param : processorRef.getParameters())
+        {
+            if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
+            {
+                // Snap it back to its default value, and notify the DAW so the UI updates
+                p->beginChangeGesture();
+                p->setValueNotifyingHost(p->getDefaultValue());
+                p->endChangeGesture();
+            }
+        }
+    };
+
     // --- Wet/Dry and Master Gain ---
     auto setupSlider = [&](juce::Slider& slider, juce::Label& label, const char* text, const char* paramID) {
         addAndMakeVisible(slider);
@@ -62,6 +92,20 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     setupSlider(flutterSlider, flutterLabel, "Flutter", "flutter");
     setupSlider(bassSlider, bassLabel, "Bass", "bass");
     setupSlider(trebleSlider, trebleLabel, "Treble", "treble");
+
+    // tooltips
+    delayTimeSlider.setTooltip("Adjusts the tape read head distance (50ms - 600ms).");
+    feedbackSlider.setTooltip("Feeds the echoes back into the tape. Warning: High values will self-oscillate!");
+    saturationSlider.setTooltip("Drives the signal into the magnetic tape for harmonic distortion.");
+    wowSlider.setTooltip("Simulates slow tape motor inconsistencies.");
+    flutterSlider.setTooltip("Simulates fast tape crinkle and mechanical wear.");
+    killDryButton.setTooltip("Mutes the original signal. Essential for using on Aux/Send busses.");
+    bassSlider.setTooltip ("This sets the Low shelf that effects the Wet Signal. It is at 150Hz");
+    trebleSlider.setTooltip ("This sets the High Shelf that effects the Wet Signal. It is set at 3KHz");
+    inputGainSlider.setTooltip ("This changes the level of signal that is coming into the plugin. An overload indicator is provided just above the knob.");
+    resetIRButton.setTooltip ("This resets the IR back to stock if a custom one is set.");
+
+
 
     setSize(700, 600);
 
@@ -127,7 +171,7 @@ void PluginEditor::paint(juce::Graphics& g)
     // 4. Title
     g.setColour(juce::Colours::black);
     g.setFont(24.0f);
-    g.drawText("Cosmic Tape Delay 201 Version 0.9.0", area.removeFromTop(40), juce::Justification::centred, false);
+    g.drawText("Cosmic Tape Delay 201 Version 0.9.1", area.removeFromTop(40), juce::Justification::centred, false);
 }
 
 void PluginEditor::resized()
@@ -174,7 +218,7 @@ void PluginEditor::resized()
     masterGainLabel.setBounds(col4, bottomStrip.getY(), mixKnobWidth, 20);
     masterGainSlider.setBounds(col4, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // --- LEFT COLUMN (Heads) ---
+    // --- LEFT COLUMN (Heads & Utility) ---
     auto leftCol = area.removeFromLeft(150);
     int buttonHeight = 40;
     int startY = leftCol.getY() + 40;
@@ -182,6 +226,13 @@ void PluginEditor::resized()
     head1Button.setBounds(leftCol.getX() + 10, startY, 100, buttonHeight);
     head2Button.setBounds(leftCol.getX() + 10, startY + 50, 100, buttonHeight);
     head3Button.setBounds(leftCol.getX() + 10, startY + 100, 100, buttonHeight);
+
+    // Put Utility switches right below Head 3
+    bypassButton.setBounds(leftCol.getX() + 10, startY + 160, 100, buttonHeight);
+    killDryButton.setBounds(leftCol.getX() + 10, startY + 210, 100, buttonHeight);
+
+    // NEW: Put Reset below Kill Dry
+    initButton.setBounds(leftCol.getX() + 10, startY + 260, 100, buttonHeight);
 
     // --- MAIN EFFECTS GRID (Right Side) ---
     int knobSize = 90;
