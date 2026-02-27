@@ -190,6 +190,11 @@ private:
 
     juce::SharedResourcePointer<juce::TooltipWindow> tooltipWindow;
 
+    juce::ToggleButton syncButton { "Sync BPM" };
+    juce::ComboBox syncRateBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> syncRateAttachment;
+
     OverloadLED peakLed;
     float ledDecay = 0.0f;
 

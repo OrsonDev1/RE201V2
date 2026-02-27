@@ -39,6 +39,20 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "bypass", bypassButton);
     killDryAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "killDry", killDryButton);
 
+    addAndMakeVisible(syncButton);
+    syncButton.setColour(juce::ToggleButton::textColourId, juce::Colours::black);
+    syncButton.setTooltip("Locks the delay time to your DAW's tempo.");
+    syncAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.parameters, "syncMode", syncButton);
+
+    addAndMakeVisible(syncRateBox);
+    syncRateBox.addItemList({"1/2", "1/4", "1/4 Dotted", "1/4 Triplet", "1/8", "1/8 Dotted", "1/8 Triplet", "1/16"}, 1);
+    syncRateBox.setJustificationType(juce::Justification::centred);
+    syncRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processorRef.parameters, "syncRate", syncRateBox);
+
+    // Polish: Grey out the free-time knob when Sync is enabled
+    syncButton.onClick = [this] { delayTimeSlider.setEnabled(!syncButton.getToggleState()); };
+    delayTimeSlider.setEnabled(!syncButton.getToggleState()); // Set initial state
+
     //reset
     addAndMakeVisible(initButton);
     initButton.setTooltip("Resets all parameters to their default 'Ground Zero' values.");
@@ -107,7 +121,7 @@ PluginEditor::PluginEditor(PluginProcessor& p)
 
 
 
-    setSize(700, 600);
+    setSize(850, 480);
 
     // --- IR Load Button ---
     addAndMakeVisible(loadIRButton);
@@ -164,14 +178,13 @@ void PluginEditor::paint(juce::Graphics& g)
     // 3. Draw Section Dividers (Lines)
     g.setColour(juce::Colours::black.withAlpha(0.3f));
 
-    // FIX: Move line to X=170, and shorten the bottom (faceplate.getBottom() - 130)
-    // so it cleanly stops right above the master mixer strip.
-    g.drawLine(170.0f, faceplate.getY() + 10.0f, 170.0f, faceplate.getBottom() - 130.0f, 1.0f);
+    // The line now draws all the way to the bottom (faceplate.getBottom() - 10.0f)
+    g.drawLine(170.0f, faceplate.getY() + 10.0f, 170.0f, faceplate.getBottom() - 10.0f, 1.0f);
 
     // 4. Title
     g.setColour(juce::Colours::black);
     g.setFont(24.0f);
-    g.drawText("Cosmic Tape Delay 201 Version 0.9.1", area.removeFromTop(40), juce::Justification::centred, false);
+    g.drawText("Cosmic Tape Delay 201 Version 0.9.2 Beta", area.removeFromTop(40), juce::Justification::centred, false);
 }
 
 void PluginEditor::resized()
@@ -179,102 +192,105 @@ void PluginEditor::resized()
     auto area = getLocalBounds().reduced(20);
     area.removeFromTop(40); // Skip title
 
-    // --- BOTTOM MIXER STRIP (Master Section) ---
-    auto bottomStrip = area.removeFromBottom(120);
+    // --- 1. LEFT COLUMN (Now spans the entire height of the UI) ---
+    auto leftCol = area.removeFromLeft(150);
+    int buttonHeight = 35;
+    int startY = leftCol.getY() + 15;
 
-    // FIX: Divide by 5 to make room for Input Gain
+    // Heads
+    head1Button.setBounds(leftCol.getX() + 10, startY, 100, buttonHeight);
+    head2Button.setBounds(leftCol.getX() + 10, startY + 45, 100, buttonHeight);
+    head3Button.setBounds(leftCol.getX() + 10, startY + 90, 100, buttonHeight);
+
+    // Tempo Sync
+    syncButton.setBounds(leftCol.getX() + 10, startY + 140, 100, buttonHeight);
+    syncRateBox.setBounds(leftCol.getX() + 10, startY + 180, 100, 25);
+
+    // Utilities
+    bypassButton.setBounds(leftCol.getX() + 10, startY + 230, 100, buttonHeight);
+    killDryButton.setBounds(leftCol.getX() + 10, startY + 275, 100, buttonHeight);
+    initButton.setBounds(leftCol.getX() + 10, startY + 320, 100, buttonHeight);
+
+    // Add a visual gap between the vertical line and the right-side controls
+    area.removeFromLeft(20);
+
+    // --- 2. BOTTOM MIXER STRIP (Now only spans the right side) ---
+    auto bottomStrip = area.removeFromBottom(120);
     int mixKnobWidth = bottomStrip.getWidth() / 5;
 
-    // 1. INPUT GAIN & LED (Col 0)
+    // 1. INPUT GAIN & LED
     int col0 = bottomStrip.getX();
     inputGainLabel.setBounds(col0, bottomStrip.getY(), mixKnobWidth, 20);
     inputGainSlider.setBounds(col0, bottomStrip.getY() + 20, mixKnobWidth, 80);
-    // Place LED near the top right of the knob
     peakLed.setBounds(col0 + mixKnobWidth - 30, bottomStrip.getY() + 10, 15, 15);
 
-    // 2. ECHO MIX (Col 1)
+    // 2. ECHO MIX
     int col1 = bottomStrip.getX() + mixKnobWidth;
     echoMixLabel.setBounds(col1, bottomStrip.getY(), mixKnobWidth, 20);
     echoMixSlider.setBounds(col1, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // 3. REVERB MIX (Col 2)
+    // 3. REVERB MIX
     int col2 = bottomStrip.getX() + mixKnobWidth * 2;
     reverbMixLabel.setBounds(col2, bottomStrip.getY(), mixKnobWidth, 20);
     reverbMixSlider.setBounds(col2, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // Load and Reset buttons under Reverb Mix
     int buttonY = reverbMixSlider.getBottom() + 5;
     int loadBtnWidth = mixKnobWidth - 40;
     loadIRButton.setBounds(col2 + 5, buttonY, loadBtnWidth, 20);
     resetIRButton.setBounds(loadIRButton.getRight() + 5, buttonY, 25, 20);
 
-    // 4. MASTER MIX (Col 3)
+    // 4. MASTER MIX
     int col3 = bottomStrip.getX() + mixKnobWidth * 3;
     masterMixLabel.setBounds(col3, bottomStrip.getY(), mixKnobWidth, 20);
     masterMixSlider.setBounds(col3, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // 5. MASTER GAIN (Col 4)
+    // 5. MASTER GAIN
     int col4 = bottomStrip.getX() + mixKnobWidth * 4;
     masterGainLabel.setBounds(col4, bottomStrip.getY(), mixKnobWidth, 20);
     masterGainSlider.setBounds(col4, bottomStrip.getY() + 20, mixKnobWidth, 80);
 
-    // --- LEFT COLUMN (Heads & Utility) ---
-    auto leftCol = area.removeFromLeft(150);
-    int buttonHeight = 40;
-    int startY = leftCol.getY() + 40;
-
-    head1Button.setBounds(leftCol.getX() + 10, startY, 100, buttonHeight);
-    head2Button.setBounds(leftCol.getX() + 10, startY + 50, 100, buttonHeight);
-    head3Button.setBounds(leftCol.getX() + 10, startY + 100, 100, buttonHeight);
-
-    // Put Utility switches right below Head 3
-    bypassButton.setBounds(leftCol.getX() + 10, startY + 160, 100, buttonHeight);
-    killDryButton.setBounds(leftCol.getX() + 10, startY + 210, 100, buttonHeight);
-
-    // NEW: Put Reset below Kill Dry
-    initButton.setBounds(leftCol.getX() + 10, startY + 260, 100, buttonHeight);
-
-    // --- MAIN EFFECTS GRID (Right Side) ---
+    // --- 3. MAIN EFFECTS GRID (Repacked for balance) ---
     int knobSize = 90;
-    int spacing = 20; // Horizontal spacing
-    int vSpacing = 10; // Vertical spacing between rows
+    int spacing = 35; // Wider spacing to fill the new width
+    int vSpacing = 15;
 
-    // Starting coordinates for the grid
-    int gridStartX = area.getX() + 20;
+    int gridStartX = area.getX() + 10;
     int gridStartY = area.getY() + 10;
+
+    // Pre-calculate column X positions
+    int x1 = gridStartX;
+    int x2 = x1 + knobSize + spacing;
+    int x3 = x2 + knobSize + spacing;
+    int x4 = x3 + knobSize + spacing;
 
     // --- ROW 1: Delay | Feedback | Saturation ---
     int row1Y = gridStartY;
 
-    delayLabel.setBounds(gridStartX, row1Y, knobSize, 20);
-    delayTimeSlider.setBounds(gridStartX, row1Y + 20, knobSize, knobSize);
+    delayLabel.setBounds(x1, row1Y, knobSize, 20);
+    delayTimeSlider.setBounds(x1, row1Y + 20, knobSize, knobSize);
 
-    feedbackLabel.setBounds(gridStartX + knobSize + spacing, row1Y, knobSize, 20);
-    feedbackSlider.setBounds(gridStartX + knobSize + spacing, row1Y + 20, knobSize, knobSize);
+    feedbackLabel.setBounds(x2, row1Y, knobSize, 20);
+    feedbackSlider.setBounds(x2, row1Y + 20, knobSize, knobSize);
 
-    // Extra width for Saturation label so it doesn't squish
-    int satX = gridStartX + (knobSize + spacing) * 2;
-    saturationLabel.setBounds(satX - 10, row1Y, knobSize + 20, 20);
-    saturationSlider.setBounds(satX, row1Y + 20, knobSize, knobSize);
+    saturationLabel.setBounds(x3 - 10, row1Y, knobSize + 20, 20);
+    saturationSlider.setBounds(x3, row1Y + 20, knobSize, knobSize);
 
-    // --- ROW 2: Wow | Flutter ---
+    // --- ROW 2: Wow | Flutter | Bass | Treble ---
     int row2Y = row1Y + knobSize + 20 + vSpacing;
 
-    wowLabel.setBounds(gridStartX, row2Y, knobSize, 20);
-    wowSlider.setBounds(gridStartX, row2Y + 20, knobSize, knobSize);
+    wowLabel.setBounds(x1, row2Y, knobSize, 20);
+    wowSlider.setBounds(x1, row2Y + 20, knobSize, knobSize);
 
-    flutterLabel.setBounds(gridStartX + knobSize + spacing, row2Y, knobSize, 20);
-    flutterSlider.setBounds(gridStartX + knobSize + spacing, row2Y + 20, knobSize, knobSize);
+    flutterLabel.setBounds(x2, row2Y, knobSize, 20);
+    flutterSlider.setBounds(x2, row2Y + 20, knobSize, knobSize);
 
-    // --- ROW 3: BASS & TREBLE ---
-    int row3Y = row2Y + knobSize + 20 + vSpacing;
+    bassLabel.setBounds(x3, row2Y, knobSize, 20);
+    bassSlider.setBounds(x3, row2Y + 20, knobSize, knobSize);
 
-    bassLabel.setBounds(gridStartX, row3Y, knobSize, 20);
-    bassSlider.setBounds(gridStartX, row3Y + 20, knobSize, knobSize);
-
-    trebleLabel.setBounds(gridStartX + knobSize + spacing, row3Y, knobSize, 20);
-    trebleSlider.setBounds(gridStartX + knobSize + spacing, row3Y + 20, knobSize, knobSize);
+    trebleLabel.setBounds(x4, row2Y, knobSize, 20);
+    trebleSlider.setBounds(x4, row2Y + 20, knobSize, knobSize);
 }
+
 void PluginEditor::timerCallback()
 {
     // 0.95f is almost clipping (digital absolute zero is 1.0f)

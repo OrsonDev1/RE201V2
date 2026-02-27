@@ -32,7 +32,12 @@ parameters(*this, nullptr, "PARAMETERS", {
 
     std::make_unique<juce::AudioParameterBool>("head1", "Head 1", true),
     std::make_unique<juce::AudioParameterBool>("head2", "Head 2", true),
-    std::make_unique<juce::AudioParameterBool>("head3", "Head 3", true)
+    std::make_unique<juce::AudioParameterBool>("head3", "Head 3", true),
+
+    std::make_unique<juce::AudioParameterBool>("syncMode", "Tempo Sync", false),
+    std::make_unique<juce::AudioParameterChoice>("syncRate", "Sync Rate", juce::StringArray{
+        "1/2", "1/4", "1/4 Dotted", "1/4 Triplet", "1/8", "1/8 Dotted", "1/8 Triplet", "1/16"
+    }, 1), // Default is index 1 ("1/4")
 
 })
 
@@ -54,6 +59,9 @@ parameters(*this, nullptr, "PARAMETERS", {
     head3Param = parameters.getRawParameterValue("head3");
     bypassParam = parameters.getRawParameterValue("bypass");
     killDryParam = parameters.getRawParameterValue("killDry");
+    syncModeParam = parameters.getRawParameterValue("syncMode");
+    syncRateParam = parameters.getRawParameterValue("syncRate");
+
 }
 
 PluginProcessor::~PluginProcessor()
@@ -73,9 +81,8 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     writeIndex = 0;
 
     // Smooth delay time changes
-    smoothedDelayTime.reset(sampleRate, 0.08); // 20ms smoothing
-    if (delayTimeParam)
-        smoothedDelayTime.setCurrentAndTargetValue(delayTimeParam->load());
+    smoothedDelayTime.reset(sampleRate, 0.08); // 80ms smoothing
+    if (delayTimeParam) smoothedDelayTime.setCurrentAndTargetValue(delayTimeParam->load());
 
     // --- 2. Initialize EQ Filters ---
     bassFilters.resize(getTotalNumOutputChannels());
@@ -161,7 +168,47 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if (head3Param) headEnabled[2] = head3Param->load() > 0.5f;
 
     // Feed target to smoother instead of loading instantly
-    if (delayTimeParam)   smoothedDelayTime.setTargetValue(delayTimeParam->load());
+    // --- TEMPO SYNC LOGIC ---
+    float targetDelayMs = 500.0f;
+    bool isSync = syncModeParam && syncModeParam->load() > 0.5f;
+
+    if (isSync)
+    {
+        double bpm = 120.0; // Default fallback
+        if (auto* playHead = getPlayHead()) {
+            if (auto pos = playHead->getPosition()) {
+                if (pos->getBpm().hasValue()) bpm = *pos->getBpm();
+            }
+        }
+
+        // Math: 60,000 ms in a minute / BPM = length of 1 Quarter Note
+        float quarterNoteMs = 60000.0f / static_cast<float>(bpm);
+        int rateIndex = syncRateParam ? static_cast<int>(syncRateParam->load()) : 1;
+
+        float multiplier = 1.0f;
+        switch (rateIndex) {
+            case 0: multiplier = 2.0f;      break; // 1/2
+            case 1: multiplier = 1.0f;      break; // 1/4
+            case 2: multiplier = 1.5f;      break; // 1/4 Dotted
+            case 3: multiplier = 0.666667f; break; // 1/4 Triplet
+            case 4: multiplier = 0.5f;      break; // 1/8
+            case 5: multiplier = 0.75f;     break; // 1/8 Dotted
+            case 6: multiplier = 0.333333f; break; // 1/8 Triplet
+            case 7: multiplier = 0.25f;     break; // 1/16
+        }
+
+        targetDelayMs = quarterNoteMs * multiplier;
+        // Safety clamp so tape doesn't crash if BPM gets crazy
+        targetDelayMs = juce::jlimit(50.0f, 2000.0f, targetDelayMs);
+    }
+    else
+    {
+        if (delayTimeParam) targetDelayMs = delayTimeParam->load();
+    }
+
+    // Feed the chosen target to the motor smoother
+    smoothedDelayTime.setTargetValue(targetDelayMs);
+
 
     if (feedbackParam)    feedback      = feedbackParam->load();
     if (saturationParam)  saturation    = saturationParam->load();
